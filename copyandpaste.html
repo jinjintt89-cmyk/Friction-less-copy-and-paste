@@ -1,1819 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TidyPaste — a workbench for messy paste</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --paper:#EAEFE9;
+    --paper-raised:#F5F7F3;
+    --card-glass: rgba(245,247,243,0.70);
+    --nav-glass: rgba(234,239,233,0.58);
+    --nav-glass-scrolled: rgba(234,239,233,0.85);
+    --ink:#1F2A24;
+    --ink-soft:#5B6B60;
+    --line:#C9D2C7;
+    --mark:#B8432B;
+    --mark-soft:#F4DCD3;
+    --mark-quote:#8A6A2E;
+    --mark-quote-soft:#F1E4C4;
+    --mark-nbsp:#2E5F8A;
+    --mark-nbsp-soft:#D9E5F0;
+    --success:#2F6F4E;
+    --success-soft:#DCEBE1;
+    --blob-1:#C9D9CB;
+    --blob-2:#E7D3B8;
+    --blob-3:#C9D6E3;
+    --radius-card:12px;
+    --radius-chip:999px;
+    --shadow: 0 1px 2px rgba(31,42,36,0.06), 0 4px 14px rgba(31,42,36,0.05);
+    --shadow-lift: 0 6px 20px rgba(31,42,36,0.12);
+  }
+
+  html[data-theme="dark"]{
+    --paper:#141B17;
+    --paper-raised:#1B2420;
+    --card-glass: rgba(27,36,32,0.66);
+    --nav-glass: rgba(20,27,23,0.5);
+    --nav-glass-scrolled: rgba(20,27,23,0.82);
+    --ink:#E9EFE9;
+    --ink-soft:#93A69B;
+    --line:#33443B;
+    --mark:#E2775A;
+    --mark-soft: rgba(226,119,90,0.18);
+    --mark-quote:#D8B563;
+    --mark-quote-soft: rgba(216,181,99,0.16);
+    --mark-nbsp:#7FB0DA;
+    --mark-nbsp-soft: rgba(127,176,218,0.16);
+    --success:#6FC49A;
+    --success-soft: rgba(111,196,154,0.16);
+    --blob-1: rgba(120,160,130,0.30);
+    --blob-2: rgba(200,160,100,0.22);
+    --blob-3: rgba(110,150,190,0.24);
+    --shadow: 0 1px 2px rgba(0,0,0,0.25), 0 4px 18px rgba(0,0,0,0.22);
+    --shadow-lift: 0 8px 24px rgba(0,0,0,0.32);
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    min-height:100vh;
+    transition:background .3s ease, color .3s ease;
+  }
+
+  ::selection{ background:var(--mark-soft); color:var(--ink); }
+
+  /* ---------- Ambient background ---------- */
+  .bg-blobs{
+    position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none;
+  }
+  .blob{
+    position:absolute; border-radius:50%; filter:blur(60px); opacity:0.55;
+    will-change:transform;
+  }
+  .blob-1{ width:38vw; height:38vw; background:var(--blob-1); top:-10%; left:-8%; animation:drift1 34s ease-in-out infinite; }
+  .blob-2{ width:30vw; height:30vw; background:var(--blob-2); top:40%; right:-10%; animation:drift2 40s ease-in-out infinite; }
+  .blob-3{ width:26vw; height:26vw; background:var(--blob-3); bottom:-12%; left:22%; animation:drift3 46s ease-in-out infinite; }
+  @keyframes drift1{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(6vw,8vh) scale(1.08); } }
+  @keyframes drift2{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(-7vw,6vh) scale(0.95); } }
+  @keyframes drift3{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(5vw,-6vh) scale(1.1); } }
+
+  @media (prefers-reduced-motion: reduce){
+    html{ scroll-behavior:auto; }
+    .blob{ animation:none !important; }
+    *{ transition-duration:0.001ms !important; animation-duration:0.001ms !important; }
+  }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:24px 20px 60px; position:relative; z-index:1; }
+
+  /* ---------- Sticky glass nav ---------- */
+  .sitenav{
+    position:sticky; top:0; z-index:50;
+    background:var(--nav-glass);
+    backdrop-filter:blur(16px) saturate(160%);
+    -webkit-backdrop-filter:blur(16px) saturate(160%);
+    border-bottom:1px solid transparent;
+    transition:background .25s ease, border-color .25s ease, box-shadow .25s ease;
+  }
+  .sitenav.scrolled{
+    background:var(--nav-glass-scrolled);
+    border-bottom-color:var(--line);
+    box-shadow:var(--shadow);
+  }
+  .nav-inner{
+    max-width:1180px; margin:0 auto; padding:12px 20px;
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+  }
+  .nav-brand{
+    font-family:'Fraunces', serif; font-weight:700; font-size:1.15rem;
+    color:var(--ink); text-decoration:none; letter-spacing:-0.01em;
+    display:flex; align-items:center; gap:6px;
+  }
+  .nav-links{ display:flex; gap:4px; flex:1; justify-content:center; }
+  .nav-links a{
+    position:relative;
+    font-size:0.86rem; font-weight:500; color:var(--ink-soft); text-decoration:none;
+    padding:7px 12px; border-radius:7px;
+    transition:color .15s ease, background .15s ease;
+  }
+  .nav-links a:hover{ color:var(--ink); background:rgba(255,255,255,0.25); }
+  .nav-links a::after{
+    content:''; position:absolute; left:12px; right:12px; bottom:3px; height:2px;
+    background:var(--mark); border-radius:2px; transform:scaleX(0); transform-origin:left;
+    transition:transform .2s ease;
+  }
+  .nav-links a.active{ color:var(--ink); }
+  .nav-links a.active::after{ transform:scaleX(1); }
+
+  .nav-right{ display:flex; align-items:center; gap:14px; }
+  .nav-clock{
+    display:flex; flex-direction:column; align-items:flex-end; line-height:1.25;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .nav-clock #navTime{ font-size:0.82rem; font-weight:600; color:var(--ink); }
+  .nav-clock #navDate{ font-size:0.68rem; color:var(--ink-soft); }
+
+  .theme-toggle{
+    background:none; border:none; padding:0; cursor:pointer; flex-shrink:0;
+  }
+  .theme-toggle-track{
+    width:46px; height:26px; border-radius:999px; background:var(--paper-raised);
+    border:1px solid var(--line); display:flex; align-items:center; padding:2px;
+    transition:background .2s ease;
+  }
+  .theme-toggle-thumb{
+    width:20px; height:20px; border-radius:50%; background:var(--mark);
+    display:flex; align-items:center; justify-content:center; color:#fff;
+    transform:translateX(0); transition:transform .25s cubic-bezier(.4,1.4,.4,1), background .2s ease;
+  }
+  html[data-theme="dark"] .theme-toggle-thumb{ transform:translateX(20px); background:var(--mark-nbsp); }
+  .theme-toggle-thumb svg{ width:13px; height:13px; }
+  .icon-moon{ display:none; }
+  html[data-theme="dark"] .icon-sun{ display:none; }
+  html[data-theme="dark"] .icon-moon{ display:block; }
+
+  @media (max-width:760px){
+    .nav-links{ display:none; }
+    .nav-clock{ display:none; }
+  }
+
+  /* ---------- Hero ---------- */
+  .hero{
+    display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    margin:22px 0 24px; padding-bottom:18px; border-bottom:1px solid var(--line);
+  }
+  .hero h1{
+    font-family:'Fraunces', serif; font-weight:600; font-size:2.3rem; margin:0 0 6px; letter-spacing:-0.01em;
+  }
+  .hero p{ margin:0; color:var(--ink-soft); font-size:0.98rem; max-width:50ch; }
+  .stamp{
+    font-family:'IBM Plex Mono', monospace; font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--ink-soft); border:1px solid var(--line); border-radius:var(--radius-chip);
+    padding:6px 14px; background:var(--paper-raised); white-space:nowrap;
+  }
+
+  section{ scroll-margin-top:76px; }
+
+  .section-head{ margin:44px 0 16px; }
+  .section-head .eyebrow{
+    font-family:'IBM Plex Mono', monospace; font-size:0.74rem; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--mark); display:block; margin-bottom:4px;
+  }
+  .section-head h2{
+    font-family:'Fraunces', serif; font-weight:600; font-size:1.5rem; margin:0 0 4px;
+  }
+  .section-head p{ margin:0; color:var(--ink-soft); font-size:0.92rem; max-width:60ch; }
+
+  /* ---------- Layout: clean & convert ---------- */
+  .grid{
+    display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;
+  }
+  @media (max-width:860px){ .grid{ grid-template-columns:1fr; } }
+
+  .card{
+    background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius-card);
+    box-shadow:var(--shadow); padding:18px; transition:background .3s ease, border-color .3s ease, box-shadow .2s ease;
+  }
+  .card.glass{
+    background:var(--card-glass); backdrop-filter:blur(14px) saturate(150%); -webkit-backdrop-filter:blur(14px) saturate(150%);
+  }
+  .card.lift:hover{ box-shadow:var(--shadow-lift); transform:translateY(-2px); }
+  .card.lift{ transition:transform .18s ease, box-shadow .18s ease; }
+
+  .card-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px; flex-wrap:wrap; }
+  .card-head h2, .card-head h3{ font-family:'Fraunces', serif; font-size:1.05rem; font-weight:600; margin:0; }
+  .count{ font-family:'IBM Plex Mono', monospace; font-size:0.75rem; color:var(--ink-soft); }
+
+  textarea{
+    width:100%; min-height:230px; resize:vertical; font-family:'IBM Plex Mono', monospace; font-size:0.88rem;
+    line-height:1.5; color:var(--ink); background:var(--paper-raised); border:1px solid var(--line); border-radius:8px;
+    padding:12px; outline:none; transition:border-color .15s ease, box-shadow .15s ease, background .3s ease;
+  }
+  textarea:focus-visible{ border-color:var(--mark-nbsp); box-shadow:0 0 0 3px var(--mark-nbsp-soft); }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+  .chip{
+    display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; padding:6px 12px;
+    border-radius:var(--radius-chip); border:1px solid var(--line); background:var(--paper-raised); color:var(--ink-soft);
+    cursor:pointer; user-select:none; transition:border-color .15s, color .15s, background .15s, transform .1s;
+  }
+  .chip:hover{ transform:translateY(-1px); }
+  .chip input{ accent-color:var(--mark); }
+  .chip.on{ border-color:var(--mark); color:var(--ink); background:var(--mark-soft); }
+
+  .btn{
+    font-family:'IBM Plex Sans', sans-serif; font-weight:600; font-size:0.88rem; border:none; border-radius:8px;
+    padding:10px 18px; cursor:pointer; transition:transform .12s ease, opacity .15s ease, box-shadow .15s ease;
+  }
+  .btn:hover{ box-shadow:0 3px 10px rgba(31,42,36,0.14); }
+  .btn:active{ transform:scale(0.97); }
+  .btn:focus-visible, a:focus-visible, .tab:focus-visible, .chip:focus-within, .cal-cell:focus-visible, .accordion-trigger:focus-visible{
+    outline:2px solid var(--mark-nbsp); outline-offset:2px;
+  }
+  .btn-primary{ background:var(--mark); color:#fff; }
+  .btn-primary:hover{ opacity:0.92; }
+  .btn-ghost{ background:transparent; border:1px solid var(--line); color:var(--ink-soft); }
+  .btn-ghost:hover{ border-color:var(--ink-soft); color:var(--ink); }
+  .btn-sm{ font-size:0.76rem; padding:6px 12px; border-radius:6px; }
+
+  .row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .row.between{ justify-content:space-between; }
+
+  .tabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .tab{
+    font-family:'IBM Plex Mono', monospace; font-size:0.76rem; padding:7px 12px; border-radius:7px;
+    border:1px solid var(--line); background:var(--paper-raised); color:var(--ink-soft); cursor:pointer;
+    transition:background .15s ease, color .15s ease, transform .1s ease;
+  }
+  .tab:hover:not(:disabled){ transform:translateY(-1px); }
+  .tab.active{ background:var(--ink); color:var(--paper-raised); border-color:var(--ink); }
+  .tab:disabled{ opacity:0.4; cursor:not-allowed; }
+
+  pre.output{
+    background:var(--paper-raised); border:1px solid var(--line); border-radius:8px; padding:14px;
+    min-height:230px; max-height:400px; overflow:auto; font-family:'IBM Plex Mono', monospace; font-size:0.85rem;
+    line-height:1.55; white-space:pre-wrap; word-break:break-word; margin:0; transition:background .3s ease;
+  }
+
+  .hint{ font-size:0.82rem; color:var(--ink-soft); padding:10px 2px; }
+
+  .mk{ border-radius:3px; padding:0 1px; }
+  .mk-quote{ background:var(--mark-quote-soft); color:var(--mark-quote); text-decoration:line-through; text-decoration-color:var(--mark-quote); }
+  .mk-space{ background:var(--mark-nbsp-soft); outline:1px solid var(--mark-nbsp); }
+  .mk-zw{ background:var(--mark-soft); color:var(--mark); font-size:0.75em; padding:0 2px; border-radius:3px; }
+  .mk-trail{ background:var(--mark-soft); text-decoration:underline; text-decoration-color:var(--mark); text-decoration-style:wavy; }
+
+  .stats-line{
+    font-family:'IBM Plex Mono', monospace; font-size:0.78rem; color:var(--ink-soft); margin-top:10px; padding-top:10px;
+    border-top:1px dashed var(--line);
+  }
+  .stats-line strong{ color:var(--ink); }
+
+  .flash{
+    display:inline-flex; align-items:center; gap:5px; color:var(--success); font-size:0.8rem; font-weight:600;
+    opacity:0; transition:opacity .2s ease;
+  }
+  .flash.show{ opacity:1; }
+
+  /* ---------- Clipboard auto-clear row ---------- */
+  .autoclear-row{
+    margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:0.8rem; color:var(--ink-soft);
+  }
+  .autoclear-row select{
+    font-family:'IBM Plex Mono', monospace; font-size:0.78rem; padding:4px 8px; border-radius:6px;
+    border:1px solid var(--line); background:var(--paper-raised); color:var(--ink);
+  }
+  .switch{ position:relative; display:inline-flex; align-items:center; cursor:pointer; }
+  .switch input{ position:absolute; opacity:0; width:0; height:0; }
+  .switch-track{
+    width:36px; height:20px; border-radius:999px; background:var(--paper-raised); border:1px solid var(--line);
+    display:flex; align-items:center; padding:2px; transition:background .2s ease, border-color .2s ease;
+  }
+  .switch-thumb{
+    width:14px; height:14px; border-radius:50%; background:var(--ink-soft);
+    transition:transform .2s cubic-bezier(.4,1.4,.4,1), background .2s ease;
+  }
+  .switch input:checked + .switch-track{ border-color:var(--mark); }
+  .switch input:checked + .switch-track .switch-thumb{ transform:translateX(16px); background:var(--mark); }
+  .clip-countdown{
+    font-family:'IBM Plex Mono', monospace; font-size:0.76rem; color:var(--mark);
+    display:none; align-items:center; gap:5px;
+  }
+  .clip-countdown.show{ display:inline-flex; }
+
+  /* ---------- Toolkit section ---------- */
+  .toolkit-grid{ display:grid; grid-template-columns:1.1fr 0.9fr; gap:20px; align-items:start; }
+  @media (max-width:900px){ .toolkit-grid{ grid-template-columns:1fr; } }
+
+  .cal-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .cal-nav-btn{
+    width:28px; height:28px; border-radius:7px; border:1px solid var(--line); background:var(--paper-raised);
+    color:var(--ink-soft); cursor:pointer; font-size:0.9rem; display:flex; align-items:center; justify-content:center;
+    transition:background .15s ease, transform .1s ease;
+  }
+  .cal-nav-btn:hover{ background:var(--mark-soft); color:var(--mark); transform:scale(1.06); }
+  .cal-month-label{ font-family:'IBM Plex Mono', monospace; font-size:0.86rem; font-weight:600; }
+
+  .cal-weekdays, .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .cal-weekdays span{
+    text-align:center; font-size:0.68rem; color:var(--ink-soft); font-family:'IBM Plex Mono', monospace; padding-bottom:4px;
+  }
+  .cal-cell{
+    aspect-ratio:1; border:1px solid transparent; border-radius:7px; background:transparent; color:var(--ink);
+    font-size:0.8rem; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition:background .12s ease, transform .1s ease, color .12s ease;
+  }
+  .cal-cell:hover{ background:var(--mark-soft); transform:scale(1.05); }
+  .cal-outside{ color:var(--ink-soft); opacity:0.45; }
+  .cal-today{ border-color:var(--mark-nbsp); }
+  .cal-selected{ background:var(--mark); color:#fff; }
+  .cal-selected:hover{ background:var(--mark); }
+
+  .fmt-list{ margin-top:14px; display:flex; flex-direction:column; gap:6px; }
+  .fmt-row{
+    display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 10px;
+    border:1px solid var(--line); border-radius:8px; background:var(--paper-raised); font-size:0.82rem;
+  }
+  .fmt-row .fmt-label{ color:var(--ink-soft); font-size:0.7rem; font-family:'IBM Plex Mono', monospace; text-transform:uppercase; letter-spacing:0.04em; }
+  .fmt-row .fmt-value{ font-family:'IBM Plex Mono', monospace; font-weight:500; }
+  .fmt-actions{ display:flex; gap:4px; }
+  .fmt-actions button{
+    font-size:0.7rem; padding:4px 8px; border-radius:5px; border:1px solid var(--line); background:transparent;
+    color:var(--ink-soft); cursor:pointer; transition:background .12s ease, color .12s ease;
+  }
+  .fmt-actions button:hover{ background:var(--mark-soft); color:var(--mark); border-color:var(--mark); }
+
+  .fmt-divider{ font-family:'IBM Plex Mono', monospace; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); margin:12px 0 4px; }
+
+  /* ---------- Timer / Stopwatch ---------- */
+  .timer-tabs{ display:flex; gap:6px; margin-bottom:14px; }
+  .timer-display{
+    font-family:'IBM Plex Mono', monospace; font-size:2.6rem; font-weight:500; text-align:center; letter-spacing:0.02em;
+    padding:18px 0; border:1px solid var(--line); border-radius:10px; background:var(--paper-raised); margin-bottom:12px;
+    transition:border-color .2s ease, background .3s ease;
+  }
+  .timer-display.timer-done{ border-color:var(--mark); animation:pulseDone 1s ease-in-out infinite; }
+  @keyframes pulseDone{ 0%,100%{ box-shadow:0 0 0 0 var(--mark-soft); } 50%{ box-shadow:0 0 0 8px transparent; } }
+  .timer-status{ text-align:center; font-size:0.78rem; color:var(--ink-soft); margin:-6px 0 12px; font-family:'IBM Plex Mono', monospace; }
+  .timer-presets{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .timer-controls{ display:flex; gap:8px; justify-content:center; }
+
+  /* ---------- Guide accordion ---------- */
+  .guide-card{ margin-top:0; }
+  .accordion-item{ border-bottom:1px solid var(--line); }
+  .accordion-item:last-child{ border-bottom:none; }
+  .accordion-trigger{
+    width:100%; text-align:left; background:none; border:none; padding:14px 4px; cursor:pointer;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    font-family:'IBM Plex Sans', sans-serif; font-weight:600; font-size:0.94rem; color:var(--ink);
+  }
+  .accordion-trigger .chevron{ transition:transform .2s ease; color:var(--ink-soft); flex-shrink:0; }
+  .accordion-item.open .accordion-trigger .chevron{ transform:rotate(180deg); }
+  .accordion-panel{
+    max-height:0; overflow:hidden; transition:max-height .25s ease;
+  }
+  .accordion-panel p{ margin:0 0 14px; padding:0 4px; color:var(--ink-soft); font-size:0.88rem; line-height:1.6; }
+
+  /* ---------- History ---------- */
+  .history{ margin-top:0; }
+  .history-controls{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .search-wrap{ position:relative; flex:1; min-width:180px; }
+  .search-wrap input{
+    width:100%; padding:8px 12px 8px 32px; border:1px solid var(--line); border-radius:8px; background:var(--paper-raised);
+    color:var(--ink); font-size:0.85rem; font-family:'IBM Plex Sans', sans-serif; outline:none;
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  .search-wrap input:focus-visible{ border-color:var(--mark-nbsp); box-shadow:0 0 0 3px var(--mark-nbsp-soft); }
+  .search-wrap svg{ position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--ink-soft); width:14px; height:14px; }
+  .retention-wrap{ display:flex; align-items:center; gap:6px; font-size:0.8rem; color:var(--ink-soft); }
+  .retention-wrap select{
+    font-family:'IBM Plex Mono', monospace; font-size:0.78rem; padding:6px 8px; border-radius:6px;
+    border:1px solid var(--line); background:var(--paper-raised); color:var(--ink);
+  }
+
+  .history-item{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px;
+    border:1px solid var(--line); border-radius:8px; background:var(--paper-raised); margin-bottom:8px;
+    transition:background .3s ease, transform .15s ease, opacity .15s ease;
+  }
+  .history-item:hover{ transform:translateX(2px); }
+  .history-item .snippet-wrap{ overflow:hidden; flex:1; min-width:0; }
+  .history-item .snippet{
+    font-family:'IBM Plex Mono', monospace; font-size:0.78rem; color:var(--ink-soft);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block;
+  }
+  .history-item .snippet mark{ background:var(--mark-soft); color:var(--mark); border-radius:2px; }
+  .history-item .meta{ font-size:0.68rem; color:var(--ink-soft); opacity:0.75; margin-top:2px; font-family:'IBM Plex Mono', monospace; }
+  .history-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .empty-note{ color:var(--ink-soft); font-size:0.85rem; font-style:italic; }
+
+  footer{ margin-top:36px; text-align:center; color:var(--ink-soft); font-size:0.78rem; }
+  kbd{
+    font-family:'IBM Plex Mono', monospace; background:var(--paper-raised); border:1px solid var(--line); border-radius:4px;
+    padding:1px 5px; font-size:0.75rem;
+  }
+
+  /* ---------- Back to top ---------- */
+  .back-to-top{
+    position:fixed; bottom:22px; right:22px; z-index:40; width:44px; height:44px; border-radius:50%;
+    background:var(--ink); color:var(--paper-raised); border:none; cursor:pointer; font-size:1.1rem;
+    display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-lift);
+    opacity:0; transform:translateY(12px) scale(0.9); pointer-events:none;
+    transition:opacity .2s ease, transform .2s ease, background .3s ease;
+  }
+  .back-to-top.show{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+  .back-to-top:hover{ transform:translateY(-2px) scale(1.05); }
+</style>
+</head>
+<body>
+
+<div class="bg-blobs" aria-hidden="true">
+  <span class="blob blob-1"></span>
+  <span class="blob blob-2"></span>
+  <span class="blob blob-3"></span>
+</div>
+
+<nav class="sitenav" id="sitenav">
+  <div class="nav-inner">
+    <a class="nav-brand" href="#top">TidyPaste</a>
+    <div class="nav-links" id="navLinks">
+      <a href="#clean" data-section="clean">Clean</a>
+      <a href="#toolkit" data-section="toolkit">Toolkit</a>
+      <a href="#guide" data-section="guide">Guide</a>
+      <a href="#history" data-section="history">History</a>
+    </div>
+    <div class="nav-right">
+      <div class="nav-clock">
+        <span id="navTime">--:--:--</span>
+        <span id="navDate">—</span>
+      </div>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" aria-pressed="false" title="Toggle dark mode">
+        <span class="theme-toggle-track">
+          <span class="theme-toggle-thumb">
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
+          </span>
+        </span>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap" id="top">
+
+  <header class="hero">
+    <div class="brand">
+      <h1>TidyPaste</h1>
+      <p>Paste something messy. Get back clean text, the right format, and the timestamps you needed to type by hand — all in one workbench.</p>
+    </div>
+    <div class="stamp">workbench · runs entirely in this tab</div>
+  </header>
+
+  <!-- ============ CLEAN & CONVERT ============ -->
+  <section id="clean" class="grid">
+
+    <div class="card lift">
+      <div class="card-head">
+        <h2>Paste</h2>
+        <span class="count" id="inCount">0 characters</span>
+      </div>
+      <textarea id="input" placeholder="Paste text copied from a PDF, Word doc, email, or website…"></textarea>
+
+      <div class="chips" id="toggles">
+        <label class="chip on"><input type="checkbox" data-opt="quotes" checked> curly quotes → straight</label>
+        <label class="chip on"><input type="checkbox" data-opt="dashes" checked> em/en dash → hyphen</label>
+        <label class="chip on"><input type="checkbox" data-opt="nbsp" checked> non-breaking spaces</label>
+        <label class="chip on"><input type="checkbox" data-opt="zeroWidth" checked> invisible characters</label>
+        <label class="chip on"><input type="checkbox" data-opt="trailing" checked> trailing whitespace</label>
+        <label class="chip on"><input type="checkbox" data-opt="blankLines" checked> collapse blank lines</label>
+      </div>
+
+      <div class="row between">
+        <button class="btn btn-primary" id="cleanBtn">Clean &amp; convert →</button>
+        <span class="hint" style="padding:0;"><kbd>Ctrl/Cmd</kbd> + <kbd>Enter</kbd></span>
+      </div>
+    </div>
+
+    <div class="card lift">
+      <div class="card-head">
+        <h2>Output</h2>
+        <span class="count" id="outCount">—</span>
+      </div>
+
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="clean">Clean text</button>
+        <button class="tab" data-tab="markdown">Markdown table</button>
+        <button class="tab" data-tab="csv">CSV</button>
+        <button class="tab" data-tab="json">JSON</button>
+        <button class="tab" data-tab="marks">Marks ✎</button>
+      </div>
+
+      <pre class="output" id="outputBox">Paste text on the left, then hit Clean &amp; convert.</pre>
+
+      <div class="row between" style="margin-top:12px;">
+        <button class="btn btn-ghost btn-sm" id="copyBtn">Copy this view</button>
+        <span class="flash" id="flash">✓ Copied</span>
+      </div>
+
+      <div class="autoclear-row">
+        <label class="switch">
+          <input type="checkbox" id="autoClearToggle">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
+        <span>Clear clipboard after copying</span>
+        <select id="autoClearSeconds">
+          <option value="15">15s</option>
+          <option value="30" selected>30s</option>
+          <option value="60">60s</option>
+        </select>
+        <span class="clip-countdown" id="clipCountdown">⏱ clears in 30s</span>
+      </div>
+
+      <div class="stats-line" id="stats" style="display:none;"></div>
+    </div>
+  </section>
+
+  <!-- ============ TOOLKIT: DATE, TIME, CALENDAR, TIMER ============ -->
+  <section id="toolkit">
+    <div class="section-head">
+      <span class="eyebrow">Toolkit</span>
+      <h2>Date, time &amp; a place to keep it moving</h2>
+      <p>Stop retyping today's date in three different formats, and keep a session on the clock while you work through a batch of pastes.</p>
+    </div>
+
+    <div class="toolkit-grid">
+
+      <div class="card glass lift">
+        <div class="card-head">
+          <h3>Date &amp; time inserter</h3>
+        </div>
+
+        <div class="cal-header">
+          <button class="cal-nav-btn" id="calPrev" aria-label="Previous month">‹</button>
+          <span class="cal-month-label" id="calMonthLabel">—</span>
+          <button class="cal-nav-btn" id="calNext" aria-label="Next month">›</button>
+        </div>
+        <div class="cal-weekdays">
+          <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+
+        <div class="fmt-divider">Selected date</div>
+        <div class="fmt-list" id="dateFmtList"></div>
+
+        <div class="fmt-divider">Right now</div>
+        <div class="fmt-list" id="timeFmtList"></div>
+
+        <p class="hint" style="padding:8px 2px 0;">Insert drops the formatted text into your paste at the cursor. Copy sends just that value to your clipboard.</p>
+      </div>
+
+      <div class="card glass lift">
+        <div class="card-head">
+          <h3>Focus timer</h3>
+        </div>
+        <div class="timer-tabs">
+          <button class="tab active" data-timer-mode="timer">Countdown</button>
+          <button class="tab" data-timer-mode="stopwatch">Stopwatch</button>
+        </div>
+        <div class="timer-display" id="timerDisplay">05:00</div>
+        <div class="timer-status" id="timerStatus">Ready</div>
+        <div class="timer-presets" id="timerPresets">
+          <button class="btn btn-ghost btn-sm" data-preset="5">5 min</button>
+          <button class="btn btn-ghost btn-sm" data-preset="10">10 min</button>
+          <button class="btn btn-ghost btn-sm" data-preset="25">25 min</button>
+        </div>
+        <div class="timer-controls">
+          <button class="btn btn-primary btn-sm" id="timerStart">Start</button>
+          <button class="btn btn-ghost btn-sm" id="timerPause">Pause</button>
+          <button class="btn btn-ghost btn-sm" id="timerReset">Reset</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ GUIDE ============ -->
+  <section id="guide">
+    <div class="section-head">
+      <span class="eyebrow">Guide</span>
+      <h2>What each part actually does</h2>
+    </div>
+    <div class="card guide-card" id="accordion"></div>
+  </section>
+
+  <!-- ============ HISTORY ============ -->
+  <section id="history" class="card history">
+    <div class="card-head">
+      <h2>Recent pastes</h2>
+      <button class="btn btn-ghost btn-sm" id="clearHistory">Clear all</button>
+    </div>
+
+    <div class="history-controls">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="historySearch" placeholder="Search your recent pastes…">
+      </div>
+      <div class="retention-wrap">
+        <span>Keep saved pastes:</span>
+        <select id="retentionSelect">
+          <option value="never">Until cleared</option>
+          <option value="10m">10 minutes</option>
+          <option value="1h">1 hour</option>
+          <option value="24h">24 hours</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="historyList"><p class="empty-note">Nothing saved yet — your recent cleaned pastes will show up here.</p></div>
+  </section>
+
+  <footer>Everything happens locally in this artifact. Recent pastes are saved to your own storage, not shared with anyone else.</footer>
+</div>
+
+<button class="back-to-top" id="backToTop" aria-label="Back to top">↑</button>
+
 <script>
-(function () {
-  'use strict';
+(function(){
+  function escapeHtml(str){
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function pad(n){ return String(n).padStart(2,'0'); }
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function fmtISO(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function fmtAU(d){ return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear(); }
+  function fmtUS(d){ return pad(d.getMonth()+1)+'/'+pad(d.getDate())+'/'+d.getFullYear(); }
+  function fmtLong(d){
+    const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    return days[d.getDay()]+', '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
+  }
+  function fmtTime24(d){ return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+  function fmtTime12(d){
+    let h = d.getHours();
+    const ampm = h>=12 ? 'PM':'AM';
+    h = h%12; if(h===0) h=12;
+    return pad(h)+':'+pad(d.getMinutes())+' '+ampm;
+  }
+  function fmtTimestamp(d){ return fmtISO(d)+' '+fmtTime24(d); }
+
+  function buildMonthGrid(year, month){
+    const first = new Date(year, month, 1);
+    const startWeekday = first.getDay();
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    const prevMonthDate = new Date(year, month, 0);
+    const daysInPrevMonth = prevMonthDate.getDate();
+    const prevYear = prevMonthDate.getFullYear();
+    const prevMonth = prevMonthDate.getMonth();
+    const nextMonthDate = new Date(year, month+1, 1);
+    const nextYear = nextMonthDate.getFullYear();
+    const nextMonth = nextMonthDate.getMonth();
+
+    const cells = [];
+    for(let i=startWeekday-1;i>=0;i--){
+      cells.push({ day: daysInPrevMonth-i, month: prevMonth, year: prevYear, currentMonth:false });
+    }
+    for(let d=1; d<=daysInMonth; d++){
+      cells.push({ day:d, month, year, currentMonth:true });
+    }
+    let nd=1;
+    while(cells.length % 7 !== 0){
+      cells.push({ day: nd++, month: nextMonth, year: nextYear, currentMonth:false });
+    }
+    return cells;
+  }
+  function shiftMonth(year, month, delta){
+    const d = new Date(year, month+delta, 1);
+    return { year: d.getFullYear(), month: d.getMonth() };
+  }
+
+  function spliceAtCursor(value, start, end, insertText){
+    return value.slice(0,start) + insertText + value.slice(end);
+  }
+  function insertAtCursor(el, text){
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    el.value = spliceAtCursor(el.value, start, end, text);
+    const pos = start + text.length;
+    el.selectionStart = el.selectionEnd = pos;
+    el.focus();
+    el.dispatchEvent(new Event('input'));
+  }
+
+  function msFromRetention(key){
+    switch(key){
+      case '10m': return 10*60*1000;
+      case '1h': return 60*60*1000;
+      case '24h': return 24*60*60*1000;
+      default: return null;
+    }
+  }
+  function purgeExpired(arr, retentionKey, now){
+    const ms = msFromRetention(retentionKey);
+    if(ms==null) return arr;
+    return arr.filter(item => (now - item.ts) < ms);
+  }
+  function formatRemaining(ms){
+    if(ms<=0) return 'expiring…';
+    const s = Math.ceil(ms/1000);
+    if(s<60) return s+'s';
+    const m = Math.ceil(s/60);
+    if(m<60) return m+'m';
+    const h = Math.ceil(m/60);
+    return h+'h';
+  }
+
+  function filterHistory(arr, query){
+    const q = query.trim().toLowerCase();
+    if(!q) return arr;
+    return arr.filter(item => item.snippet.toLowerCase().includes(q));
+  }
+  function highlightMatchHtml(text, query){
+    const safe = escapeHtml(text);
+    const q = query.trim();
+    if(!q) return safe;
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if(idx===-1) return safe;
+    const before = escapeHtml(text.slice(0,idx));
+    const match = escapeHtml(text.slice(idx, idx+q.length));
+    const after = escapeHtml(text.slice(idx+q.length));
+    return before + '<mark>' + match + '</mark>' + after;
+  }
+
+  function formatClock(ms){
+    const totalSeconds = Math.max(0, Math.round(ms/1000));
+    const m = Math.floor(totalSeconds/60);
+    const s = totalSeconds % 60;
+    return pad(m)+':'+pad(s);
+  }
+
+  function cleanText(text, opts){
+    let t = text;
+    let stats = { smartChars:0, nbsp:0, zeroWidth:0, trailing:0, blankLines:0 };
+    if(opts.quotes){
+      const matches = (t.match(/[\u201C\u201D\u2018\u2019]/g) || []).length;
+      t = t.replace(/[\u201C\u201D]/g,'"').replace(/[\u2018\u2019]/g,"'");
+      stats.smartChars += matches;
+    }
+    if(opts.dashes){
+      const matches = (t.match(/[\u2013\u2014]/g) || []).length;
+      t = t.replace(/\u2014/g,'--').replace(/\u2013/g,'-');
+      stats.smartChars += matches;
+    }
+    if(opts.nbsp){
+      stats.nbsp = (t.match(/\u00A0/g) || []).length;
+      t = t.replace(/\u00A0/g,' ');
+    }
+    if(opts.zeroWidth){
+      const zwRe = /[\u200B\u200C\u200D\uFEFF]/g;
+      stats.zeroWidth = (t.match(zwRe) || []).length;
+      t = t.replace(zwRe,'');
+    }
+    if(opts.trailing){
+      let count = 0;
+      t = t.split('\n').map(line=>{
+        if(/[ \t]+$/.test(line)) count++;
+        return line.replace(/[ \t]+$/,'');
+      }).join('\n');
+      stats.trailing = count;
+    }
+    if(opts.blankLines){
+      stats.blankLines = (t.match(/\n{3,}/g) || []).length;
+      t = t.replace(/\n{3,}/g,'\n\n');
+    }
+    return { cleaned:t, stats };
+  }
+
+  function buildMarks(text, opts){
+    let html = escapeHtml(text);
+    if(opts.trailing){
+      html = html.split('\n').map(line=> line.replace(/([ \t]+)$/, '<span class="mk mk-trail">$1</span>')).join('\n');
+    }
+    if(opts.quotes){
+      html = html.replace(/[\u201C\u201D\u2018\u2019]/g, m=>'<span class="mk mk-quote">'+m+'</span>');
+    }
+    if(opts.dashes){
+      html = html.replace(/[\u2013\u2014]/g, m=>'<span class="mk mk-quote">'+m+'</span>');
+    }
+    if(opts.nbsp){
+      html = html.replace(/\u00A0/g, '<span class="mk mk-space">&nbsp;</span>');
+    }
+    if(opts.zeroWidth){
+      html = html.replace(/[\u200B\u200C\u200D\uFEFF]/g, '<span class="mk mk-zw">⌫</span>');
+    }
+    return html;
+  }
+
+  function detectFormat(text){
+    const lines = text.split('\n').filter(l=>l.trim()!=='');
+    if(lines.length < 2) return 'plain-list';
+    const sep = lines[1].trim();
+    if(/^\|?[\s:-]+\|[\s:|-]*\|?$/.test(sep) && sep.includes('-')) return 'markdown';
+    const tabCounts = lines.map(l=>(l.match(/\t/g)||[]).length);
+    if(tabCounts[0] > 0 && tabCounts.every(c=>c===tabCounts[0])) return 'tsv';
+    const commaCounts = lines.map(l=>(l.match(/,/g)||[]).length);
+    if(commaCounts[0] > 0 && commaCounts.every(c=>c===commaCounts[0])) return 'csv';
+    return 'plain-list';
+  }
+
+  function parseTable(text, mode){
+    const lines = text.split('\n').filter(l=>l.trim()!=='');
+    if(mode==='tsv') return lines.map(l=>l.split('\t').map(c=>c.trim()));
+    if(mode==='csv') return lines.map(l=>l.split(',').map(c=>c.trim()));
+    if(mode==='markdown'){
+      return lines
+        .map(l=>l.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>c.trim()))
+        .filter(row=>!row.every(c=>/^:?-+:?$/.test(c)));
+    }
+    return lines.map(l=>[l.trim()]);
+  }
+
+  function toCSV(rows){
+    const esc = v=>{
+      v = String(v ?? '');
+      if(/[",\n]/.test(v)) return '"'+v.replace(/"/g,'""')+'"';
+      return v;
+    };
+    return rows.map(r=>r.map(esc).join(',')).join('\n');
+  }
+  function toMarkdownTable(rows, hasHeader){
+    if(!rows.length) return '';
+    const cols = rows[0].length;
+    const header = hasHeader ? rows[0] : Array.from({length:cols},(_,i)=>'Column '+(i+1));
+    const body = hasHeader ? rows.slice(1) : rows;
+    const line1 = '| '+header.join(' | ')+' |';
+    const line2 = '| '+header.map(()=> '---').join(' | ')+' |';
+    const lines = body.map(r=>'| '+r.join(' | ')+' |');
+    return [line1,line2,...lines].join('\n');
+  }
+  function toJSONOut(rows, hasHeader){
+    if(!rows.length) return '[]';
+    if(rows[0].length===1 && !hasHeader){
+      return JSON.stringify(rows.map(r=>r[0]), null, 2);
+    }
+    if(hasHeader){
+      const header = rows[0];
+      const body = rows.slice(1);
+      return JSON.stringify(body.map(r=>{
+        const obj={};
+        header.forEach((h,i)=> obj[h || ('col'+(i+1))] = r[i] ?? '');
+        return obj;
+      }), null, 2);
+    }
+    return JSON.stringify(rows, null, 2);
+  }
 
   const SETTINGS_KEY = 'tidypaste:settings';
   const HISTORY_KEY = 'tidypaste:history';
   const MAX_HISTORY = 15;
 
-  const $ = (selector, root = document) => root.querySelector(selector);
-  const $$ = (selector, root = document) =>
-    Array.from(root.querySelectorAll(selector));
-
-  const reducedMotion =
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-
-  const DAYS = [
-    'Sunday',
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday'
-  ];
-
-  const MONTHS = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December'
-  ];
-
-  const RETENTION = {
-    '10m': 10 * 60 * 1000,
-    '1h': 60 * 60 * 1000,
-    '24h': 24 * 60 * 60 * 1000
-  };
-
-  function pad(value) {
-    return String(value).padStart(2, '0');
+  async function loadSettings(){
+    try{
+      const res = await window.storage.get(SETTINGS_KEY, false);
+      return res ? JSON.parse(res.value) : {};
+    }catch(err){ return {}; }
+  }
+  async function saveSettings(patch){
+    const cur = await loadSettings();
+    const next = Object.assign({}, cur, patch);
+    try{ await window.storage.set(SETTINGS_KEY, JSON.stringify(next), false); }catch(err){}
+    return next;
+  }
+  async function loadHistory(){
+    try{
+      const res = await window.storage.get(HISTORY_KEY, false);
+      const arr = res ? JSON.parse(res.value) : [];
+      return arr.map(item => ({ ...item, ts: typeof item.ts === 'number' ? item.ts : Date.now() }));
+    }catch(err){ return []; }
+  }
+  async function saveHistoryArr(arr){
+    try{ await window.storage.set(HISTORY_KEY, JSON.stringify(arr), false); }catch(err){}
   }
 
-  function escapeHtml(value) {
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+  const themeToggle = document.getElementById('themeToggle');
+  function applyTheme(theme){
+    document.documentElement.setAttribute('data-theme', theme);
+    themeToggle.setAttribute('aria-pressed', String(theme==='dark'));
   }
-
-  function now() {
-    return new Date();
-  }
-
-  /*
-   * DATE / TIME
-   */
-
-  function formatISO(date) {
-    return [
-      date.getFullYear(),
-      pad(date.getMonth() + 1),
-      pad(date.getDate())
-    ].join('-');
-  }
-
-  function formatAU(date) {
-    return [
-      pad(date.getDate()),
-      pad(date.getMonth() + 1),
-      date.getFullYear()
-    ].join('/');
-  }
-
-  function formatUS(date) {
-    return [
-      pad(date.getMonth() + 1),
-      pad(date.getDate()),
-      date.getFullYear()
-    ].join('/');
-  }
-
-  function formatLongDate(date) {
-    return `${DAYS[date.getDay()]}, ${date.getDate()} ${
-      MONTHS[date.getMonth()]
-    } ${date.getFullYear()}`;
-  }
-
-  function format24Hour(date) {
-    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
-      date.getSeconds()
-    )}`;
-  }
-
-  function format12Hour(date) {
-    let hour = date.getHours();
-    const suffix = hour >= 12 ? 'PM' : 'AM';
-
-    hour %= 12;
-    if (hour === 0) hour = 12;
-
-    return `${pad(hour)}:${pad(date.getMinutes())} ${suffix}`;
-  }
-
-  function formatTimestamp(date) {
-    return `${formatISO(date)} ${format24Hour(date)}`;
-  }
-
-  /*
-   * STORAGE
-   */
-
-  async function readStorage(key, fallback) {
-    try {
-      const result = await window.storage.get(key, false);
-
-      if (!result?.value) {
-        return fallback;
-      }
-
-      return JSON.parse(result.value);
-    } catch {
-      return fallback;
-    }
-  }
-
-  async function writeStorage(key, value) {
-    try {
-      await window.storage.set(key, JSON.stringify(value), false);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async function loadSettings() {
-    const settings = await readStorage(SETTINGS_KEY, {});
-    return settings && typeof settings === 'object' && !Array.isArray(settings)
-      ? settings
-      : {};
-  }
-
-  async function updateSettings(changes) {
+  async function initTheme(){
     const settings = await loadSettings();
-    const updated = { ...settings, ...changes };
-
-    await writeStorage(SETTINGS_KEY, updated);
-    return updated;
-  }
-
-  async function loadHistory() {
-    const history = await readStorage(HISTORY_KEY, []);
-
-    if (!Array.isArray(history)) {
-      return [];
+    let theme = settings.theme;
+    if(!theme){
+      theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
     }
-
-    return history.map(item => ({
-      ...item,
-      ts: typeof item.ts === 'number' ? item.ts : Date.now()
-    }));
+    applyTheme(theme);
   }
+  themeToggle.addEventListener('click', async ()=>{
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur==='dark' ? 'light' : 'dark';
+    applyTheme(next);
+    await saveSettings({ theme: next });
+  });
 
-  function saveHistory(history) {
-    return writeStorage(HISTORY_KEY, history);
+  const sitenav = document.getElementById('sitenav');
+  const backToTop = document.getElementById('backToTop');
+  let ticking = false;
+  function onScroll(){
+    if(ticking) return;
+    ticking = true;
+    requestAnimationFrame(()=>{
+      const y = window.scrollY;
+      sitenav.classList.toggle('scrolled', y > 8);
+      backToTop.classList.toggle('show', y > 480);
+      ticking = false;
+    });
   }
+  window.addEventListener('scroll', onScroll, { passive:true });
+  backToTop.addEventListener('click', ()=>{
+    window.scrollTo({ top:0, behavior: reduceMotion ? 'auto' : 'smooth' });
+  });
 
-  /*
-   * CALENDAR
-   */
-
-  const calendar = {
-    today: now(),
-    year: now().getFullYear(),
-    month: now().getMonth(),
-    selected: now()
-  };
-
-  const calendarElements = {
-    monthLabel: $('#calMonthLabel'),
-    grid: $('#calGrid'),
-    previous: $('#calPrev'),
-    next: $('#calNext')
-  };
-
-  function getMonthCells(year, month) {
-    const first = new Date(year, month, 1);
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    const previousMonth = new Date(year, month, 0);
-    const nextMonth = new Date(year, month + 1, 1);
-
-    const cells = [];
-
-    for (let i = first.getDay() - 1; i >= 0; i--) {
-      cells.push({
-        day: previousMonth.getDate() - i,
-        month: previousMonth.getMonth(),
-        year: previousMonth.getFullYear(),
-        currentMonth: false
-      });
-    }
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      cells.push({
-        day,
-        month,
-        year,
-        currentMonth: true
-      });
-    }
-
-    let day = 1;
-
-    while (cells.length % 7 !== 0) {
-      cells.push({
-        day: day++,
-        month: nextMonth.getMonth(),
-        year: nextMonth.getFullYear(),
-        currentMonth: false
-      });
-    }
-
-    return cells;
-  }
-
-  function changeMonth(amount) {
-    const date = new Date(
-      calendar.year,
-      calendar.month + amount,
-      1
-    );
-
-    calendar.year = date.getFullYear();
-    calendar.month = date.getMonth();
-
-    renderCalendar();
-  }
-
-  function insertAtCursor(element, text) {
-    const start = element.selectionStart ?? element.value.length;
-    const end = element.selectionEnd ?? element.value.length;
-
-    element.value =
-      element.value.slice(0, start) +
-      text +
-      element.value.slice(end);
-
-    const position = start + text.length;
-
-    element.selectionStart = position;
-    element.selectionEnd = position;
-
-    element.focus();
-    element.dispatchEvent(new Event('input'));
-  }
-
-  function renderCalendar() {
-    const { monthLabel, grid } = calendarElements;
-
-    monthLabel.textContent =
-      `${MONTHS[calendar.month]} ${calendar.year}`;
-
-    grid.replaceChildren();
-
-    const cells = getMonthCells(
-      calendar.year,
-      calendar.month
-    );
-
-    const todayValue = formatISO(now());
-    const selectedValue = formatISO(calendar.selected);
-
-    cells.forEach(cell => {
-      const date = new Date(
-        cell.year,
-        cell.month,
-        cell.day
-      );
-
-      const button = document.createElement('button');
-
-      button.type = 'button';
-      button.className = 'cal-cell';
-
-      if (!cell.currentMonth) {
-        button.classList.add('cal-outside');
-      }
-
-      const value = formatISO(date);
-
-      if (value === todayValue) {
-        button.classList.add('cal-today');
-      }
-
-      if (value === selectedValue) {
-        button.classList.add('cal-selected');
-      }
-
-      button.textContent = cell.day;
-      button.setAttribute(
-        'aria-label',
-        formatLongDate(date)
-      );
-
-      button.addEventListener('click', () => {
-        calendar.selected = date;
-
-        if (!cell.currentMonth) {
-          calendar.year = cell.year;
-          calendar.month = cell.month;
+  const navLinks = Array.from(document.querySelectorAll('#navLinks a'));
+  const sections = ['clean','toolkit','guide','history'].map(id=>document.getElementById(id)).filter(Boolean);
+  if('IntersectionObserver' in window && sections.length){
+    const io = new IntersectionObserver((entries)=>{
+      entries.forEach(entry=>{
+        if(entry.isIntersecting){
+          const id = entry.target.id;
+          navLinks.forEach(a=> a.classList.toggle('active', a.dataset.section===id));
         }
+      });
+    }, { rootMargin: '-40% 0px -50% 0px', threshold: 0 });
+    sections.forEach(s=> io.observe(s));
+  }
 
+  const navTime = document.getElementById('navTime');
+  const navDate = document.getElementById('navDate');
+  function tickClock(){
+    const now = new Date();
+    navTime.textContent = fmtTime24(now);
+    navDate.textContent = fmtAU(now);
+    renderTimeFormats(now);
+  }
+
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const calMonthLabel = document.getElementById('calMonthLabel');
+  const calGrid = document.getElementById('calGrid');
+  const calPrev = document.getElementById('calPrev');
+  const calNext = document.getElementById('calNext');
+  const dateFmtList = document.getElementById('dateFmtList');
+  const timeFmtList = document.getElementById('timeFmtList');
+  const inputEl = document.getElementById('input');
+
+  const today = new Date();
+  const calState = { year: today.getFullYear(), month: today.getMonth(), selected: today };
+
+  function renderCalendar(){
+    calMonthLabel.textContent = monthNames[calState.month] + ' ' + calState.year;
+    const cells = buildMonthGrid(calState.year, calState.month);
+    const todayStr = fmtISO(new Date());
+    const selStr = fmtISO(calState.selected);
+    calGrid.innerHTML = '';
+    cells.forEach(cell=>{
+      const cellDate = new Date(cell.year, cell.month, cell.day);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cal-cell' + (cell.currentMonth ? '' : ' cal-outside');
+      if(fmtISO(cellDate)===todayStr) btn.classList.add('cal-today');
+      if(fmtISO(cellDate)===selStr) btn.classList.add('cal-selected');
+      btn.textContent = cell.day;
+      btn.setAttribute('aria-label', fmtLong(cellDate));
+      btn.addEventListener('click', ()=>{
+        calState.selected = cellDate;
+        if(!cell.currentMonth){ calState.year = cell.year; calState.month = cell.month; }
         renderCalendar();
         renderDateFormats();
       });
-
-      grid.appendChild(button);
+      calGrid.appendChild(btn);
     });
   }
+  calPrev.addEventListener('click', ()=>{
+    const s = shiftMonth(calState.year, calState.month, -1);
+    calState.year = s.year; calState.month = s.month;
+    renderCalendar();
+  });
+  calNext.addEventListener('click', ()=>{
+    const s = shiftMonth(calState.year, calState.month, 1);
+    calState.year = s.year; calState.month = s.month;
+    renderCalendar();
+  });
 
-  /*
-   * DATE / TIME INSERTER
-   */
-
-  const input = $('#input');
-  const navTime = $('#navTime');
-  const navDate = $('#navDate');
-  const dateFormatList = $('#dateFmtList');
-  const timeFormatList = $('#timeFmtList');
-
-  function copyToClipboard(text) {
-    return clipboard.copy(text);
-  }
-
-  function createFormatRow(label, value) {
+  function fmtRow(label, value){
     const row = document.createElement('div');
-
     row.className = 'fmt-row';
-
     row.innerHTML = `
-      <div>
-        <span class="fmt-label">${escapeHtml(label)}</span><br>
-        <span class="fmt-value">${escapeHtml(value)}</span>
-      </div>
-
+      <div><span class="fmt-label">${label}</span><br><span class="fmt-value">${escapeHtml(value)}</span></div>
       <div class="fmt-actions">
         <button type="button" data-action="insert">Insert</button>
         <button type="button" data-action="copy">Copy</button>
-      </div>
-    `;
-
-    $('[data-action="insert"]', row).addEventListener(
-      'click',
-      () => insertAtCursor(input, value)
-    );
-
-    $('[data-action="copy"]', row).addEventListener(
-      'click',
-      () => copyToClipboard(value)
-    );
-
+      </div>`;
+    row.querySelector('[data-action="insert"]').addEventListener('click', ()=> insertAtCursor(inputEl, value));
+    row.querySelector('[data-action="copy"]').addEventListener('click', ()=> copyToClipboard(value));
     return row;
   }
 
-  function renderDateFormats() {
-    const date = calendar.selected;
-
-    dateFormatList.replaceChildren(
-      createFormatRow('ISO', formatISO(date)),
-      createFormatRow('DD/MM/YYYY', formatAU(date)),
-      createFormatRow('MM/DD/YYYY', formatUS(date)),
-      createFormatRow('Long', formatLongDate(date))
-    );
+  function renderDateFormats(){
+    const d = calState.selected;
+    dateFmtList.innerHTML = '';
+    dateFmtList.appendChild(fmtRow('ISO', fmtISO(d)));
+    dateFmtList.appendChild(fmtRow('DD/MM/YYYY', fmtAU(d)));
+    dateFmtList.appendChild(fmtRow('MM/DD/YYYY', fmtUS(d)));
+    dateFmtList.appendChild(fmtRow('Long', fmtLong(d)));
+  }
+  function renderTimeFormats(now){
+    timeFmtList.innerHTML = '';
+    timeFmtList.appendChild(fmtRow('24-hour', fmtTime24(now)));
+    timeFmtList.appendChild(fmtRow('12-hour', fmtTime12(now)));
+    timeFmtList.appendChild(fmtRow('Timestamp', fmtTimestamp(now)));
   }
 
-  function renderTimeFormats(date) {
-    timeFormatList.replaceChildren(
-      createFormatRow('24-hour', format24Hour(date)),
-      createFormatRow('12-hour', format12Hour(date)),
-      createFormatRow('Timestamp', formatTimestamp(date))
-    );
+  const timerDisplay = document.getElementById('timerDisplay');
+  const timerStatus = document.getElementById('timerStatus');
+  const timerPresets = document.getElementById('timerPresets');
+  const timerStartBtn = document.getElementById('timerStart');
+  const timerPauseBtn = document.getElementById('timerPause');
+  const timerResetBtn = document.getElementById('timerReset');
+  const timerModeTabs = document.querySelectorAll('[data-timer-mode]');
+
+  const timerState = { mode:'timer', running:false, remainingMs:5*60*1000, presetMs:5*60*1000, elapsedMs:0, intervalId:null };
+
+  function renderTimerDisplay(){
+    timerDisplay.textContent = timerState.mode==='timer' ? formatClock(timerState.remainingMs) : formatClock(timerState.elapsedMs);
+  }
+  function tickTimer(){
+    if(timerState.mode==='timer'){
+      timerState.remainingMs -= 1000;
+      if(timerState.remainingMs<=0){
+        timerState.remainingMs = 0;
+        stopTimer();
+        timerDisplay.classList.add('timer-done');
+        timerStatus.textContent = "Time's up";
+      }
+    } else {
+      timerState.elapsedMs += 1000;
+    }
+    renderTimerDisplay();
+  }
+  function startTimer(){
+    if(timerState.running) return;
+    timerState.running = true;
+    timerDisplay.classList.remove('timer-done');
+    timerState.intervalId = setInterval(tickTimer, 1000);
+    timerStatus.textContent = 'Running';
+  }
+  function stopTimer(){
+    timerState.running = false;
+    if(timerState.intervalId){ clearInterval(timerState.intervalId); timerState.intervalId = null; }
+  }
+  function pauseTimer(){
+    stopTimer();
+    timerStatus.textContent = 'Paused';
+  }
+  function resetTimer(){
+    stopTimer();
+    timerState.remainingMs = timerState.presetMs;
+    timerState.elapsedMs = 0;
+    timerDisplay.classList.remove('timer-done');
+    timerStatus.textContent = 'Ready';
+    renderTimerDisplay();
   }
 
-  function updateClock() {
-    const date = now();
+  timerStartBtn.addEventListener('click', startTimer);
+  timerPauseBtn.addEventListener('click', pauseTimer);
+  timerResetBtn.addEventListener('click', resetTimer);
 
-    navTime.textContent = format24Hour(date);
-    navDate.textContent = formatAU(date);
-
-    renderTimeFormats(date);
-  }
-
-  calendarElements.previous.addEventListener(
-    'click',
-    () => changeMonth(-1)
-  );
-
-  calendarElements.next.addEventListener(
-    'click',
-    () => changeMonth(1)
-  );
-
-  /*
-   * CLEANING
-   */
-
-  function cleanText(text, options) {
-    let cleaned = text;
-
-    const stats = {
-      smartChars: 0,
-      nbsp: 0,
-      zeroWidth: 0,
-      trailing: 0,
-      blankLines: 0
-    };
-
-    if (options.quotes) {
-      const matches =
-        cleaned.match(/[\u201C\u201D\u2018\u2019]/g) || [];
-
-      cleaned = cleaned
-        .replace(/[\u201C\u201D]/g, '"')
-        .replace(/[\u2018\u2019]/g, "'");
-
-      stats.smartChars += matches.length;
-    }
-
-    if (options.dashes) {
-      const matches =
-        cleaned.match(/[\u2013\u2014]/g) || [];
-
-      cleaned = cleaned
-        .replace(/\u2014/g, '--')
-        .replace(/\u2013/g, '-');
-
-      stats.smartChars += matches.length;
-    }
-
-    if (options.nbsp) {
-      stats.nbsp =
-        (cleaned.match(/\u00A0/g) || []).length;
-
-      cleaned = cleaned.replace(/\u00A0/g, ' ');
-    }
-
-    if (options.zeroWidth) {
-      const pattern = /[\u200B\u200C\u200D\uFEFF]/g;
-
-      stats.zeroWidth =
-        (cleaned.match(pattern) || []).length;
-
-      cleaned = cleaned.replace(pattern, '');
-    }
-
-    if (options.trailing) {
-      let count = 0;
-
-      cleaned = cleaned
-        .split('\n')
-        .map(line => {
-          if (/[ \t]+$/.test(line)) {
-            count++;
-          }
-
-          return line.replace(/[ \t]+$/, '');
-        })
-        .join('\n');
-
-      stats.trailing = count;
-    }
-
-    if (options.blankLines) {
-      stats.blankLines =
-        (cleaned.match(/\n{3,}/g) || []).length;
-
-      cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-    }
-
-    return { cleaned, stats };
-  }
-
-  function buildMarks(text, options) {
-    let html = escapeHtml(text);
-
-    if (options.trailing) {
-      html = html
-        .split('\n')
-        .map(line =>
-          line.replace(
-            /([ \t]+)$/,
-            '<span class="mk mk-trail">$1</span>'
-          )
-        )
-        .join('\n');
-    }
-
-    if (options.quotes) {
-      html = html.replace(
-        /[\u201C\u201D\u2018\u2019]/g,
-        character =>
-          `<span class="mk mk-quote">${character}</span>`
-      );
-    }
-
-    if (options.dashes) {
-      html = html.replace(
-        /[\u2013\u2014]/g,
-        character =>
-          `<span class="mk mk-quote">${character}</span>`
-      );
-    }
-
-    if (options.nbsp) {
-      html = html.replace(
-        /\u00A0/g,
-        '<span class="mk mk-space">&nbsp;</span>'
-      );
-    }
-
-    if (options.zeroWidth) {
-      html = html.replace(
-        /[\u200B\u200C\u200D\uFEFF]/g,
-        '<span class="mk mk-zw">⌫</span>'
-      );
-    }
-
-    return html;
-  }
-
-  function getCleaningOptions() {
-    const options = {};
-
-    $$('#toggles input[type="checkbox"]').forEach(checkbox => {
-      options[checkbox.dataset.opt] = checkbox.checked;
+  timerPresets.querySelectorAll('[data-preset]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const mins = parseInt(btn.dataset.preset, 10);
+      timerState.presetMs = mins*60*1000;
+      resetTimer();
     });
+  });
 
-    return options;
-  }
-
-  /*
-   * FORMAT DETECTION
-   */
-
-  function nonEmptyLines(text) {
-    return text
-      .split('\n')
-      .filter(line => line.trim());
-  }
-
-  function countCharacter(line, character) {
-    return (line.match(
-      new RegExp(`\\${character}`, 'g')
-    ) || []).length;
-  }
-
-  function hasEqualCounts(lines, counter) {
-    if (!lines.length) return false;
-
-    const firstCount = counter(lines[0]);
-
-    return (
-      firstCount > 0 &&
-      lines.every(line => counter(line) === firstCount)
-    );
-  }
-
-  function detectFormat(text) {
-    const lines = nonEmptyLines(text);
-
-    if (lines.length < 2) {
-      return 'plain-list';
-    }
-
-    const secondLine = lines[1].trim();
-
-    const markdownSeparator =
-      /^\|?[\s:-]+\|[\s:|-]*\|?$/.test(secondLine);
-
-    if (
-      markdownSeparator &&
-      secondLine.includes('-')
-    ) {
-      return 'markdown';
-    }
-
-    if (
-      hasEqualCounts(
-        lines,
-        line => (line.match(/\t/g) || []).length
-      )
-    ) {
-      return 'tsv';
-    }
-
-    if (
-      hasEqualCounts(
-        lines,
-        line => (line.match(/,/g) || []).length
-      )
-    ) {
-      return 'csv';
-    }
-
-    return 'plain-list';
-  }
-
-  function parseMarkdownRow(line) {
-    return line
-      .trim()
-      .replace(/^\|/, '')
-      .replace(/\|$/, '')
-      .split('|')
-      .map(cell => cell.trim());
-  }
-
-  function parseTable(text, format) {
-    const lines = nonEmptyLines(text);
-
-    if (format === 'tsv') {
-      return lines.map(line =>
-        line.split('\t').map(cell => cell.trim())
-      );
-    }
-
-    if (format === 'csv') {
-      return lines.map(line =>
-        line.split(',').map(cell => cell.trim())
-      );
-    }
-
-    if (format === 'markdown') {
-      return lines
-        .map(parseMarkdownRow)
-        .filter(row =>
-          !row.every(cell => /^:?-+:?$/.test(cell))
-        );
-    }
-
-    return lines.map(line => [line.trim()]);
-  }
-
-  function csvCell(value) {
-    const cell = String(value ?? '');
-
-    return /[",\n]/.test(cell)
-      ? `"${cell.replace(/"/g, '""')}"`
-      : cell;
-  }
-
-  function convertToCSV(rows) {
-    return rows
-      .map(row => row.map(csvCell).join(','))
-      .join('\n');
-  }
-
-  function convertToMarkdown(rows, hasHeader) {
-    if (!rows.length) {
-      return '';
-    }
-
-    const columnCount = rows[0].length;
-
-    const header = hasHeader
-      ? rows[0]
-      : Array.from(
-          { length: columnCount },
-          (_, index) => `Column ${index + 1}`
-        );
-
-    const body = hasHeader
-      ? rows.slice(1)
-      : rows;
-
-    return [
-      `| ${header.join(' | ')} |`,
-      `| ${header.map(() => '---').join(' | ')} |`,
-      ...body.map(row => `| ${row.join(' | ')} |`)
-    ].join('\n');
-  }
-
-  function convertToJSON(rows, hasHeader) {
-    if (!rows.length) {
-      return '[]';
-    }
-
-    if (rows[0].length === 1 && !hasHeader) {
-      return JSON.stringify(
-        rows.map(row => row[0]),
-        null,
-        2
-      );
-    }
-
-    if (!hasHeader) {
-      return JSON.stringify(rows, null, 2);
-    }
-
-    const header = rows[0];
-
-    const objects = rows.slice(1).map(row => {
-      const object = {};
-
-      header.forEach((name, index) => {
-        object[name || `col${index + 1}`] =
-          row[index] ?? '';
-      });
-
-      return object;
+  timerModeTabs.forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      timerModeTabs.forEach(t=> t.classList.remove('active'));
+      tab.classList.add('active');
+      timerState.mode = tab.dataset.timerMode;
+      timerPresets.style.display = timerState.mode==='timer' ? 'flex' : 'none';
+      resetTimer();
     });
+  });
 
-    return JSON.stringify(objects, null, 2);
-  }
-
-  /*
-   * CLEANER UI
-   */
-
-  const cleaner = {
-    cleaned: '',
-    rows: [],
-    format: 'plain-list',
-    activeTab: 'clean',
-    marksHtml: '',
-    hasResult: false
-  };
-
-  const cleanerElements = {
-    inputCount: $('#inCount'),
-    outputCount: $('#outCount'),
-    outputBox: $('#outputBox'),
-    stats: $('#stats'),
-    cleanButton: $('#cleanBtn'),
-    copyButton: $('#copyBtn'),
-    flash: $('#flash'),
-    tabs: $('#tabs')
-  };
-
-  const TABLE_TABS = ['markdown', 'csv', 'json'];
-
-  function enableTableTabs(enabled) {
-    $$('#tabs [data-tab]').forEach(tab => {
-      if (TABLE_TABS.includes(tab.dataset.tab)) {
-        tab.disabled = !enabled;
+  const guideItems = [
+    { q:'What does each cleanup toggle actually fix?', a:'Curly quotes and em/en dashes come from word processors and swap to plain ASCII equivalents. Non-breaking spaces and zero-width characters are invisible characters that often sneak in from web pages and can break code, search, or form fields. Trailing whitespace and stacked blank lines are leftover formatting from copy-pasted documents.' },
+    { q:'How does format detection work?', a:'TidyPaste looks at your cleaned text and checks whether every line has the same number of tabs, the same number of commas, or matches a markdown table separator row. If none of those match, it treats the paste as a plain list, one item per line.' },
+    { q:'Is my pasted text sent anywhere?', a:'No. Cleaning, converting, and formatting all happen locally in this tab. Nothing is uploaded. Your recent-paste history is saved to your own storage, not shared with anyone else using this tool.' },
+    { q:'What does the clipboard auto-clear timer do?', a:'If you turn it on, TidyPaste overwrites your clipboard with an empty value a set number of seconds after you copy something. Handy if you ever paste something sensitive and don\u2019t want it sitting on your clipboard indefinitely.' },
+    { q:'What happens when a saved paste "expires"?', a:'If you set a retention window under History, pastes older than that window are automatically removed the next time the page checks (every few seconds). Set it to "Until cleared" to keep pastes until you delete them yourself.' }
+  ];
+  const accordionEl = document.getElementById('accordion');
+  guideItems.forEach((item, idx)=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'accordion-item';
+    wrap.innerHTML = `
+      <button class="accordion-trigger" aria-expanded="false" id="acc-trigger-${idx}">
+        <span>${escapeHtml(item.q)}</span>
+        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="accordion-panel" id="acc-panel-${idx}">
+        <p>${escapeHtml(item.a)}</p>
+      </div>`;
+    const trigger = wrap.querySelector('.accordion-trigger');
+    const panel = wrap.querySelector('.accordion-panel');
+    trigger.addEventListener('click', ()=>{
+      const isOpen = wrap.classList.contains('open');
+      if(isOpen){
+        wrap.classList.remove('open');
+        trigger.setAttribute('aria-expanded','false');
+        panel.style.maxHeight = '0px';
+      } else {
+        wrap.classList.add('open');
+        trigger.setAttribute('aria-expanded','true');
+        panel.style.maxHeight = panel.scrollHeight + 'px';
       }
     });
+    accordionEl.appendChild(wrap);
+  });
+
+  const inCount = document.getElementById('inCount');
+  const outCount = document.getElementById('outCount');
+  const outputBox = document.getElementById('outputBox');
+  const statsBox = document.getElementById('stats');
+  const cleanBtn = document.getElementById('cleanBtn');
+  const copyBtn = document.getElementById('copyBtn');
+  const flash = document.getElementById('flash');
+  const tabsEl = document.getElementById('tabs');
+
+  let state = { cleaned:'', rows:[], format:'plain-list', activeTab:'clean', marksHtml:'', hasResult:false };
+
+  function getOpts(){
+    const opts = {};
+    document.querySelectorAll('#toggles input[type=checkbox]').forEach(cb=>{ opts[cb.dataset.opt] = cb.checked; });
+    return opts;
   }
+  document.querySelectorAll('#toggles .chip').forEach(chip=>{
+    const cb = chip.querySelector('input');
+    cb.addEventListener('change', ()=> chip.classList.toggle('on', cb.checked));
+  });
+  inputEl.addEventListener('input', ()=>{ inCount.textContent = inputEl.value.length + ' characters'; });
 
-  function renderOutput() {
-    const { outputBox, outputCount, tabs } = cleanerElements;
-
-    $$('.tab', tabs).forEach(tab => {
-      tab.classList.toggle(
-        'active',
-        tab.dataset.tab === cleaner.activeTab
-      );
+  function setTableTabsEnabled(enabled){
+    tabsEl.querySelectorAll('[data-tab]').forEach(t=>{
+      if(['markdown','csv','json'].includes(t.dataset.tab)) t.disabled = !enabled;
     });
-
-    switch (cleaner.activeTab) {
-      case 'clean':
-        outputBox.textContent = cleaner.cleaned;
-        break;
-
-      case 'markdown':
-        outputBox.textContent = cleaner.rows.length
-          ? convertToMarkdown(cleaner.rows, true)
-          : 'No table structure detected in this paste — try tab-separated, comma-separated, or a markdown table.';
-        break;
-
-      case 'csv':
-        outputBox.textContent = cleaner.rows.length
-          ? convertToCSV(cleaner.rows)
-          : 'No table structure detected — paste tab/comma-separated data, or a list of items for a single-column CSV.';
-        break;
-
-      case 'json':
-        outputBox.textContent = cleaner.rows.length
-          ? convertToJSON(
-              cleaner.rows,
-              cleaner.format !== 'plain-list'
-            )
-          : '[]';
-        break;
-
-      case 'marks':
-        outputBox.innerHTML =
-          cleaner.marksHtml || 'Nothing cleaned yet.';
-        break;
-    }
-
-    outputCount.textContent = cleaner.hasResult
-      ? `${cleaner.cleaned.length} characters`
-      : '—';
   }
 
-  function updateStats(stats, format) {
-    const {
-      smartChars,
-      nbsp,
-      zeroWidth,
-      trailing,
-      blankLines
-    } = stats;
-
-    const totalFixed =
-      smartChars +
-      nbsp +
-      zeroWidth +
-      trailing +
-      blankLines;
-
-    const changes = [];
-
-    if (smartChars) {
-      changes.push(
-        `${smartChars} smart character${
-          smartChars === 1 ? '' : 's'
-        } normalized`
-      );
+  function render(){
+    tabsEl.querySelectorAll('.tab').forEach(t=> t.classList.toggle('active', t.dataset.tab===state.activeTab));
+    if(state.activeTab==='clean'){
+      outputBox.textContent = state.cleaned || '';
+    } else if(state.activeTab==='markdown'){
+      outputBox.textContent = state.rows.length ? toMarkdownTable(state.rows, true) : 'No table structure detected in this paste — try tab-separated, comma-separated, or a markdown table.';
+    } else if(state.activeTab==='csv'){
+      outputBox.textContent = state.rows.length ? toCSV(state.rows) : 'No table structure detected — paste tab/comma-separated data, or a list of items for a single-column CSV.';
+    } else if(state.activeTab==='json'){
+      outputBox.textContent = state.rows.length ? toJSONOut(state.rows, state.format!=='plain-list') : '[]';
+    } else if(state.activeTab==='marks'){
+      outputBox.innerHTML = state.marksHtml || 'Nothing cleaned yet.';
     }
-
-    if (nbsp) {
-      changes.push(
-        `${nbsp} non-breaking space${
-          nbsp === 1 ? '' : 's'
-        } fixed`
-      );
-    }
-
-    if (zeroWidth) {
-      changes.push(
-        `${zeroWidth} invisible character${
-          zeroWidth === 1 ? '' : 's'
-        } removed`
-      );
-    }
-
-    if (trailing) {
-      changes.push(
-        `${trailing} line${
-          trailing === 1 ? '' : 's'
-        } with trailing whitespace trimmed`
-      );
-    }
-
-    if (blankLines) {
-      changes.push(
-        `${blankLines} run${
-          blankLines === 1 ? '' : 's'
-        } of extra blank lines collapsed`
-      );
-    }
-
-    const labels = {
-      tsv: 'tab-separated table',
-      csv: 'comma-separated table',
-      markdown: 'markdown table',
-      'plain-list': 'plain list / text'
-    };
-
-    cleanerElements.stats.style.display = 'block';
-
-    const message = totalFixed
-      ? `<strong>Fixed:</strong> ${changes.join(' · ')}`
-      : '<strong>Fixed:</strong> nothing to clean — this paste was already tidy.';
-
-    cleanerElements.stats.innerHTML =
-      `${message} <span style="opacity:0.6;">· detected as ${
-        labels[format]
-      }</span>`;
+    outCount.textContent = state.hasResult ? (state.cleaned.length + ' characters') : '—';
   }
 
-  function cleanPaste() {
-    const rawText = input.value;
-
-    if (!rawText.trim()) {
-      cleanerElements.outputBox.textContent =
-        'Paste something on the left first.';
-      return;
-    }
-
-    const options = getCleaningOptions();
-    const result = cleanText(rawText, options);
-    const format = detectFormat(result.cleaned);
-
-    cleaner.cleaned = result.cleaned;
-    cleaner.rows = parseTable(result.cleaned, format);
-    cleaner.format = format;
-    cleaner.marksHtml = buildMarks(rawText, options);
-    cleaner.hasResult = true;
-
-    enableTableTabs(true);
-    updateStats(result.stats, format);
-    renderOutput();
-
-    saveToHistory(rawText, result.cleaned);
-  }
-
-  $$('#toggles .chip').forEach(chip => {
-    const checkbox = $('input', chip);
-
-    checkbox.addEventListener('change', () => {
-      chip.classList.toggle('on', checkbox.checked);
-    });
+  tabsEl.addEventListener('click', e=>{
+    const btn = e.target.closest('.tab');
+    if(!btn || btn.disabled) return;
+    state.activeTab = btn.dataset.tab;
+    render();
   });
 
-  input.addEventListener('input', () => {
-    cleanerElements.inputCount.textContent =
-      `${input.value.length} characters`;
-  });
+  function runClean(){
+    const raw = inputEl.value;
+    if(!raw.trim()){ outputBox.textContent = 'Paste something on the left first.'; return; }
+    const opts = getOpts();
+    const { cleaned, stats } = cleanText(raw, opts);
+    const format = detectFormat(cleaned);
+    const rows = parseTable(cleaned, format);
 
-  cleanerElements.cleanButton.addEventListener(
-    'click',
-    cleanPaste
-  );
+    state.cleaned = cleaned;
+    state.rows = rows;
+    state.format = format;
+    state.marksHtml = buildMarks(raw, opts);
+    state.hasResult = true;
 
-  document.addEventListener('keydown', event => {
-    if (
-      (event.ctrlKey || event.metaKey) &&
-      event.key === 'Enter'
-    ) {
-      event.preventDefault();
-      cleanPaste();
+    setTableTabsEnabled(true);
+
+    const totalFixed = stats.smartChars + stats.nbsp + stats.zeroWidth + stats.trailing + stats.blankLines;
+    statsBox.style.display = 'block';
+    if(totalFixed>0){
+      const parts=[];
+      if(stats.smartChars) parts.push(stats.smartChars+' smart character'+(stats.smartChars===1?'':'s')+' normalized');
+      if(stats.nbsp) parts.push(stats.nbsp+' non-breaking space'+(stats.nbsp===1?'':'s')+' fixed');
+      if(stats.zeroWidth) parts.push(stats.zeroWidth+' invisible character'+(stats.zeroWidth===1?'':'s')+' removed');
+      if(stats.trailing) parts.push(stats.trailing+' line'+(stats.trailing===1?'':'s')+' with trailing whitespace trimmed');
+      if(stats.blankLines) parts.push(stats.blankLines+' run'+(stats.blankLines===1?'':'s')+' of extra blank lines collapsed');
+      statsBox.innerHTML = '<strong>Fixed:</strong> '+parts.join(' · ');
+    } else {
+      statsBox.innerHTML = '<strong>Fixed:</strong> nothing to clean — this paste was already tidy.';
     }
-  });
+    const detectedLabel = { tsv:'tab-separated table', csv:'comma-separated table', markdown:'markdown table', 'plain-list':'plain list / text' }[format];
+    statsBox.innerHTML += ' <span style="opacity:0.6;">· detected as '+detectedLabel+'</span>';
 
-  cleanerElements.tabs.addEventListener('click', event => {
-    const tab = event.target.closest('.tab');
-
-    if (!tab || tab.disabled) {
-      return;
-    }
-
-    cleaner.activeTab = tab.dataset.tab;
-    renderOutput();
-  });
-
-  /*
-   * CLIPBOARD
-   */
-
-  const clipboard = {
-    timer: null
-  };
-
-  const clipboardElements = {
-    autoClear: $('#autoClearToggle'),
-    seconds: $('#autoClearSeconds'),
-    countdown: $('#clipCountdown'),
-    flash: $('#flash')
-  };
-
-  function stopClipboardCountdown() {
-    if (clipboard.timer !== null) {
-      clearInterval(clipboard.timer);
-      clipboard.timer = null;
-    }
-
-    clipboardElements.countdown.classList.remove('show');
+    render();
+    saveToHistory(raw, cleaned);
   }
 
-  function showClipboardMessage(message, duration) {
-    clipboardElements.flash.textContent = message;
-    clipboardElements.flash.classList.add('show');
+  cleanBtn.addEventListener('click', runClean);
+  document.addEventListener('keydown', e=>{
+    if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); runClean(); }
+  });
 
-    setTimeout(() => {
-      clipboardElements.flash.classList.remove('show');
-    }, duration);
+  const autoClearToggle = document.getElementById('autoClearToggle');
+  const autoClearSeconds = document.getElementById('autoClearSeconds');
+  const clipCountdown = document.getElementById('clipCountdown');
+  let clipTimerInterval = null;
+
+  function clearClipCountdown(){
+    if(clipTimerInterval){ clearInterval(clipTimerInterval); clipTimerInterval = null; }
+    clipCountdown.classList.remove('show');
   }
-
-  function startClipboardCountdown(seconds) {
-    stopClipboardCountdown();
-
+  function startClipCountdown(seconds){
+    clearClipCountdown();
     let remaining = seconds;
-    const countdown = clipboardElements.countdown;
-
-    countdown.textContent = `⏱ clears in ${remaining}s`;
-    countdown.classList.add('show');
-
-    clipboard.timer = setInterval(() => {
+    clipCountdown.textContent = '⏱ clears in ' + remaining + 's';
+    clipCountdown.classList.add('show');
+    clipTimerInterval = setInterval(()=>{
       remaining--;
-
-      if (remaining <= 0) {
-        clearInterval(clipboard.timer);
-        clipboard.timer = null;
-
-        navigator.clipboard
-          .writeText('')
-          .catch(() => {});
-
-        countdown.textContent =
-          '⏱ clipboard cleared';
-
-        setTimeout(() => {
-          countdown.classList.remove('show');
-        }, 1600);
-
-        return;
+      if(remaining<=0){
+        clearInterval(clipTimerInterval);
+        clipTimerInterval = null;
+        navigator.clipboard.writeText('').catch(()=>{});
+        clipCountdown.textContent = '⏱ clipboard cleared';
+        setTimeout(()=> clipCountdown.classList.remove('show'), 1600);
+      } else {
+        clipCountdown.textContent = '⏱ clears in ' + remaining + 's';
       }
-
-      countdown.textContent =
-        `⏱ clears in ${remaining}s`;
     }, 1000);
   }
 
-  clipboard.copy = async function (text) {
-    try {
+  async function copyToClipboard(text){
+    try{
       await navigator.clipboard.writeText(text);
-
-      showClipboardMessage('✓ Copied', 1400);
-
-      if (clipboardElements.autoClear.checked) {
-        startClipboardCountdown(
-          Number(clipboardElements.seconds.value)
-        );
+      flash.classList.add('show');
+      setTimeout(()=> flash.classList.remove('show'), 1400);
+      if(autoClearToggle.checked){
+        startClipCountdown(parseInt(autoClearSeconds.value, 10));
       }
-    } catch {
-      showClipboardMessage(
-        'Copy failed — select text manually',
-        1800
-      );
-
-      setTimeout(() => {
-        clipboardElements.flash.textContent = '✓ Copied';
-      }, 1800);
+    }catch(err){
+      flash.textContent = 'Copy failed — select text manually';
+      flash.classList.add('show');
+      setTimeout(()=>{ flash.classList.remove('show'); flash.textContent='✓ Copied'; }, 1800);
     }
-  };
-
-  cleanerElements.copyButton.addEventListener(
-    'click',
-    () => {
-      const text =
-        cleaner.activeTab === 'marks'
-          ? cleaner.cleaned
-          : cleanerElements.outputBox.textContent;
-
-      copyToClipboard(text);
-    }
-  );
-
-  clipboardElements.autoClear.addEventListener(
-    'change',
-    () => {
-      updateSettings({
-        autoClearEnabled:
-          clipboardElements.autoClear.checked,
-        autoClearSeconds:
-          Number(clipboardElements.seconds.value)
-      });
-    }
-  );
-
-  clipboardElements.seconds.addEventListener(
-    'change',
-    () => {
-      updateSettings({
-        autoClearSeconds:
-          Number(clipboardElements.seconds.value)
-      });
-    }
-  );
-
-  /*
-   * HISTORY
-   */
-
-  const history = {
-    items: [],
-    query: '',
-    retention: 'never'
-  };
-
-  const historyElements = {
-    list: $('#historyList'),
-    search: $('#historySearch'),
-    retention: $('#retentionSelect'),
-    clear: $('#clearHistory')
-  };
-
-  function retentionMilliseconds(value) {
-    return RETENTION[value] ?? null;
   }
+  copyBtn.addEventListener('click', ()=>{
+    const text = state.activeTab==='marks' ? state.cleaned : outputBox.textContent;
+    copyToClipboard(text);
+  });
+  autoClearToggle.addEventListener('change', async ()=>{
+    await saveSettings({ autoClearEnabled: autoClearToggle.checked, autoClearSeconds: parseInt(autoClearSeconds.value,10) });
+  });
+  autoClearSeconds.addEventListener('change', async ()=>{
+    await saveSettings({ autoClearSeconds: parseInt(autoClearSeconds.value,10) });
+  });
 
-  function removeExpired(items, retention, timestamp = Date.now()) {
-    const duration = retentionMilliseconds(retention);
+  const historyList = document.getElementById('historyList');
+  const clearHistoryBtn = document.getElementById('clearHistory');
+  const historySearch = document.getElementById('historySearch');
+  const retentionSelect = document.getElementById('retentionSelect');
 
-    if (duration === null) {
-      return items;
-    }
+  const historyState = { all: [], query: '', retention: 'never' };
 
-    return items.filter(
-      item => timestamp - item.ts < duration
-    );
-  }
+  function renderHistory(){
+    const now = Date.now();
+    const retentionMs = msFromRetention(historyState.retention);
+    const filtered = filterHistory(historyState.all, historyState.query);
 
-  function formatRemaining(milliseconds) {
-    if (milliseconds <= 0) {
-      return 'expiring…';
-    }
-
-    const seconds = Math.ceil(milliseconds / 1000);
-
-    if (seconds < 60) {
-      return `${seconds}s`;
-    }
-
-    const minutes = Math.ceil(seconds / 60);
-
-    if (minutes < 60) {
-      return `${minutes}m`;
-    }
-
-    return `${Math.ceil(minutes / 60)}h`;
-  }
-
-  function searchHistory(items, query) {
-    const search = query.trim().toLowerCase();
-
-    if (!search) {
-      return items;
-    }
-
-    return items.filter(item =>
-      item.snippet.toLowerCase().includes(search)
-    );
-  }
-
-  function highlightMatch(text, query) {
-    const safeText = escapeHtml(text);
-    const search = query.trim();
-
-    if (!search) {
-      return safeText;
-    }
-
-    const lowerText = text.toLowerCase();
-    const lowerSearch = search.toLowerCase();
-    const index = lowerText.indexOf(lowerSearch);
-
-    if (index === -1) {
-      return safeText;
-    }
-
-    const before = escapeHtml(
-      text.slice(0, index)
-    );
-
-    const match = escapeHtml(
-      text.slice(index, index + search.length)
-    );
-
-    const after = escapeHtml(
-      text.slice(index + search.length)
-    );
-
-    return `${before}<mark>${match}</mark>${after}`;
-  }
-
-  function createHistoryRow(item, duration, timestamp) {
-    const row = document.createElement('div');
-    row.className = 'history-item';
-
-    const time = formatTimestamp(new Date(item.ts));
-
-    let expiry = '';
-
-    if (duration !== null) {
-      expiry =
-        ` · expires in ${formatRemaining(
-          item.ts + duration - timestamp
-        )}`;
-    }
-
-    row.innerHTML = `
-      <div class="snippet-wrap">
-        <span class="snippet">
-          ${highlightMatch(
-            item.snippet || '(empty)',
-            history.query
-          )}
-        </span>
-
-        <span class="meta">
-          ${time}${expiry}
-        </span>
-      </div>
-
-      <div class="history-actions">
-        <button
-          class="btn btn-ghost btn-sm"
-          data-action="restore">
-          Restore
-        </button>
-
-        <button
-          class="btn btn-ghost btn-sm"
-          data-action="delete">
-          Delete
-        </button>
-      </div>
-    `;
-
-    $('[data-action="restore"]', row).addEventListener(
-      'click',
-      () => {
-        input.value = item.original;
-        cleanerElements.inputCount.textContent =
-          `${item.original.length} characters`;
-
-        cleanPaste();
-
-        $('#clean').scrollIntoView({
-          behavior: reducedMotion ? 'auto' : 'smooth'
-        });
-      }
-    );
-
-    $('[data-action="delete"]', row).addEventListener(
-      'click',
-      async () => {
-        history.items = history.items.filter(
-          entry => entry.id !== item.id
-        );
-
-        await saveHistory(history.items);
-        renderHistory();
-      }
-    );
-
-    return row;
-  }
-
-  function renderHistory() {
-    const timestamp = Date.now();
-    const duration =
-      retentionMilliseconds(history.retention);
-
-    const visible = searchHistory(
-      history.items,
-      history.query
-    );
-
-    if (!visible.length) {
-      historyElements.list.innerHTML =
-        history.items.length
-          ? '<p class="empty-note">No saved pastes match that search.</p>'
-          : '<p class="empty-note">Nothing saved yet — your recent cleaned pastes will show up here.</p>';
-
+    if(!filtered.length){
+      historyList.innerHTML = historyState.all.length
+        ? '<p class="empty-note">No saved pastes match that search.</p>'
+        : '<p class="empty-note">Nothing saved yet — your recent cleaned pastes will show up here.</p>';
       return;
     }
 
-    historyElements.list.replaceChildren();
-
-    visible.forEach(item => {
-      historyElements.list.appendChild(
-        createHistoryRow(
-          item,
-          duration,
-          timestamp
-        )
-      );
-    });
-  }
-
-  async function refreshHistory() {
-    const loaded = await loadHistory();
-
-    const valid = removeExpired(
-      loaded,
-      history.retention
-    );
-
-    history.items = valid;
-
-    if (valid.length !== loaded.length) {
-      await saveHistory(valid);
-    }
-
-    renderHistory();
-  }
-
-  async function saveToHistory(original, cleaned) {
-    const items = await loadHistory();
-    const timestamp = Date.now();
-
-    items.unshift({
-      id: timestamp,
-      snippet: original
-        .trim()
-        .slice(0, 60)
-        .replace(/\s+/g, ' '),
-      original,
-      cleaned,
-      ts: timestamp
-    });
-
-    const limited = items.slice(0, MAX_HISTORY);
-
-    await saveHistory(limited);
-
-    history.items = limited;
-    renderHistory();
-  }
-
-  historyElements.search.addEventListener(
-    'input',
-    () => {
-      history.query =
-        historyElements.search.value;
-
-      renderHistory();
-    }
-  );
-
-  historyElements.retention.addEventListener(
-    'change',
-    async () => {
-      history.retention =
-        historyElements.retention.value;
-
-      await updateSettings({
-        retention: history.retention
+    historyList.innerHTML = '';
+    filtered.forEach(item=>{
+      const row = document.createElement('div');
+      row.className = 'history-item';
+      const timeLabel = fmtTimestamp(new Date(item.ts));
+      let expiryLabel = '';
+      if(retentionMs!=null){
+        const remaining = (item.ts + retentionMs) - now;
+        expiryLabel = ' · expires in ' + formatRemaining(remaining);
+      }
+      row.innerHTML = `
+        <div class="snippet-wrap">
+          <span class="snippet">${highlightMatchHtml(item.snippet || '(empty)', historyState.query)}</span>
+          <span class="meta">${timeLabel}${expiryLabel}</span>
+        </div>
+        <div class="history-actions">
+          <button class="btn btn-ghost btn-sm" data-action="restore">Restore</button>
+          <button class="btn btn-ghost btn-sm" data-action="delete">Delete</button>
+        </div>`;
+      row.querySelector('[data-action="restore"]').addEventListener('click', ()=>{
+        inputEl.value = item.original;
+        inCount.textContent = item.original.length + ' characters';
+        runClean();
+        document.getElementById('clean').scrollIntoView({ behavior: reduceMotion ? 'auto':'smooth' });
       });
+      row.querySelector('[data-action="delete"]').addEventListener('click', async ()=>{
+        historyState.all = historyState.all.filter(x=>x.id!==item.id);
+        await saveHistoryArr(historyState.all);
+        renderHistory();
+      });
+      historyList.appendChild(row);
+    });
+  }
 
-      await refreshHistory();
+  async function refreshHistoryFromStorage(){
+    historyState.all = await loadHistory();
+    const purged = purgeExpired(historyState.all, historyState.retention, Date.now());
+    if(purged.length !== historyState.all.length){
+      historyState.all = purged;
+      await saveHistoryArr(historyState.all);
     }
-  );
+    renderHistory();
+  }
 
-  historyElements.clear.addEventListener(
-    'click',
-    async () => {
-      history.items = [];
+  async function saveToHistory(original, cleaned){
+    let arr = await loadHistory();
+    const snippet = original.trim().slice(0,60).replace(/\s+/g,' ');
+    arr.unshift({ id: Date.now(), snippet, original, cleaned, ts: Date.now() });
+    arr = arr.slice(0, MAX_HISTORY);
+    await saveHistoryArr(arr);
+    historyState.all = arr;
+    renderHistory();
+  }
 
-      await saveHistory([]);
-      renderHistory();
-    }
-  );
+  historySearch.addEventListener('input', ()=>{
+    historyState.query = historySearch.value;
+    renderHistory();
+  });
+  retentionSelect.addEventListener('change', async ()=>{
+    historyState.retention = retentionSelect.value;
+    await saveSettings({ retention: historyState.retention });
+    await refreshHistoryFromStorage();
+  });
+  clearHistoryBtn.addEventListener('click', async ()=>{
+    historyState.all = [];
+    await saveHistoryArr([]);
+    renderHistory();
+  });
 
-  setInterval(() => {
-    if (history.retention !== 'never') {
-      refreshHistory();
-    }
+  setInterval(()=>{
+    if(historyState.retention!=='never') refreshHistoryFromStorage();
   }, 5000);
 
-  /*
-   * TIMER
-   */
-
-  const timer = {
-    mode: 'timer',
-    running: false,
-    remainingMs: 5 * 60 * 1000,
-    presetMs: 5 * 60 * 1000,
-    elapsedMs: 0,
-    lastTick: null,
-    interval: null
-  };
-
-  const timerElements = {
-    display: $('#timerDisplay'),
-    status: $('#timerStatus'),
-    presets: $('#timerPresets'),
-    start: $('#timerStart'),
-    pause: $('#timerPause'),
-    reset: $('#timerReset'),
-    modes: $$('[data-timer-mode]')
-  };
-
-  function formatClock(milliseconds) {
-    const seconds = Math.max(
-      0,
-      Math.round(milliseconds / 1000)
-    );
-
-    const minutes = Math.floor(seconds / 60);
-    const remainder = seconds % 60;
-
-    return `${pad(minutes)}:${pad(remainder)}`;
-  }
-
-  function renderTimer() {
-    timerElements.display.textContent =
-      timer.mode === 'timer'
-        ? formatClock(timer.remainingMs)
-        : formatClock(timer.elapsedMs);
-  }
-
-  function stopTimer() {
-    timer.running = false;
-    timer.lastTick = null;
-
-    if (timer.interval !== null) {
-      clearInterval(timer.interval);
-      timer.interval = null;
-    }
-  }
-
-  function timerTick() {
-    if (!timer.running) {
-      return;
-    }
-
-    const currentTime = performance.now();
-
-    if (timer.lastTick === null) {
-      timer.lastTick = currentTime;
-      return;
-    }
-
-    const difference =
-      currentTime - timer.lastTick;
-
-    timer.lastTick = currentTime;
-
-    if (timer.mode === 'timer') {
-      timer.remainingMs -= difference;
-
-      if (timer.remainingMs <= 0) {
-        timer.remainingMs = 0;
-        stopTimer();
-
-        timerElements.display.classList.add(
-          'timer-done'
-        );
-
-        timerElements.status.textContent =
-          "Time's up";
-      }
-    } else {
-      timer.elapsedMs += difference;
-    }
-
-    renderTimer();
-  }
-
-  function startTimer() {
-    if (timer.running) {
-      return;
-    }
-
-    timer.running = true;
-    timer.lastTick = performance.now();
-
-    timerElements.display.classList.remove(
-      'timer-done'
-    );
-
-    timerElements.status.textContent = 'Running';
-
-    timer.interval = setInterval(
-      timerTick,
-      250
-    );
-  }
-
-  function pauseTimer() {
-    stopTimer();
-    timerElements.status.textContent = 'Paused';
-  }
-
-  function resetTimer() {
-    stopTimer();
-
-    timer.remainingMs = timer.presetMs;
-    timer.elapsedMs = 0;
-
-    timerElements.display.classList.remove(
-      'timer-done'
-    );
-
-    timerElements.status.textContent = 'Ready';
-
-    renderTimer();
-  }
-
-  timerElements.start.addEventListener(
-    'click',
-    startTimer
-  );
-
-  timerElements.pause.addEventListener(
-    'click',
-    pauseTimer
-  );
-
-  timerElements.reset.addEventListener(
-    'click',
-    resetTimer
-  );
-
-  $$('#timerPresets [data-preset]').forEach(button => {
-    button.addEventListener('click', () => {
-      const minutes =
-        Number(button.dataset.preset);
-
-      timer.presetMs =
-        minutes * 60 * 1000;
-
-      resetTimer();
-    });
-  });
-
-  timerElements.modes.forEach(tab => {
-    tab.addEventListener('click', () => {
-      timerElements.modes.forEach(other => {
-        other.classList.remove('active');
-      });
-
-      tab.classList.add('active');
-
-      timer.mode = tab.dataset.timerMode;
-
-      timerElements.presets.style.display =
-        timer.mode === 'timer'
-          ? 'flex'
-          : 'none';
-
-      resetTimer();
-    });
-  });
-
-  /*
-   * GUIDE
-   */
-
-  const guideItems = [
-    {
-      q: 'What does each cleanup toggle actually fix?',
-      a: 'Curly quotes and em/en dashes come from word processors and swap to plain ASCII equivalents. Non-breaking spaces and zero-width characters are invisible characters that often sneak in from web pages and can break code, search, or form fields. Trailing whitespace and stacked blank lines are leftover formatting from copy-pasted documents.'
-    },
-    {
-      q: 'How does format detection work?',
-      a: 'TidyPaste looks at your cleaned text and checks whether every line has the same number of tabs, the same number of commas, or matches a markdown table separator row. If none of those match, it treats the paste as a plain list, one item per line.'
-    },
-    {
-      q: 'Is my pasted text sent anywhere?',
-      a: 'No. Cleaning, converting, and formatting all happen locally in this tab. Nothing is uploaded. Your recent-paste history is saved to your own storage, not shared with anyone else using this tool.'
-    },
-    {
-      q: 'What does the clipboard auto-clear timer do?',
-      a: 'If you turn it on, TidyPaste overwrites your clipboard with an empty value a set number of seconds after you copy something. Handy if you ever paste something sensitive and don’t want it sitting on your clipboard indefinitely.'
-    },
-    {
-      q: 'What happens when a saved paste "expires"?',
-      a: 'If you set a retention window under History, pastes older than that window are automatically removed the next time the page checks. Set it to "Until cleared" to keep pastes until you delete them yourself.'
-    }
-  ];
-
-  const accordion = $('#accordion');
-
-  function createGuideItem(item, index) {
-    const wrapper = document.createElement('div');
-
-    wrapper.className = 'accordion-item';
-
-    wrapper.innerHTML = `
-      <button
-        class="accordion-trigger"
-        aria-expanded="false"
-        id="acc-trigger-${index}">
-
-        <span>
-          ${escapeHtml(item.q)}
-        </span>
-
-        <svg
-          class="chevron"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.4">
-          <path d="M6 9l6 6 6-6"/>
-        </svg>
-      </button>
-
-      <div
-        class="accordion-panel"
-        id="acc-panel-${index}">
-
-        <p>
-          ${escapeHtml(item.a)}
-        </p>
-      </div>
-    `;
-
-    const trigger =
-      $('.accordion-trigger', wrapper);
-
-    const panel =
-      $('.accordion-panel', wrapper);
-
-    trigger.addEventListener('click', () => {
-      const isOpen =
-        wrapper.classList.contains('open');
-
-      wrapper.classList.toggle(
-        'open',
-        !isOpen
-      );
-
-      trigger.setAttribute(
-        'aria-expanded',
-        String(!isOpen)
-      );
-
-      panel.style.maxHeight =
-        isOpen
-          ? '0px'
-          : `${panel.scrollHeight}px`;
-    });
-
-    return wrapper;
-  }
-
-  guideItems.forEach((item, index) => {
-    accordion.appendChild(
-      createGuideItem(item, index)
-    );
-  });
-
-  /*
-   * THEME
-   */
-
-  const themeToggle = $('#themeToggle');
-
-  function applyTheme(theme) {
-    document.documentElement.dataset.theme =
-      theme;
-
-    themeToggle.setAttribute(
-      'aria-pressed',
-      String(theme === 'dark')
-    );
-  }
-
-  async function initialiseTheme(settings) {
-    let theme = settings.theme;
-
-    if (!theme) {
-      theme =
-        window.matchMedia?.(
-          '(prefers-color-scheme: dark)'
-        ).matches
-          ? 'dark'
-          : 'light';
-    }
-
-    applyTheme(theme);
-  }
-
-  themeToggle.addEventListener(
-    'click',
-    async () => {
-      const current =
-        document.documentElement.dataset.theme;
-
-      const next =
-        current === 'dark'
-          ? 'light'
-          : 'dark';
-
-      applyTheme(next);
-
-      await updateSettings({
-        theme: next
-      });
-    }
-  );
-
-  /*
-   * NAVIGATION
-   */
-
-  const siteNav = $('#sitenav');
-  const backToTop = $('#backToTop');
-
-  let scrollPending = false;
-
-  function updateScrollUI() {
-    if (scrollPending) {
-      return;
-    }
-
-    scrollPending = true;
-
-    requestAnimationFrame(() => {
-      const position = window.scrollY;
-
-      siteNav.classList.toggle(
-        'scrolled',
-        position > 8
-      );
-
-      backToTop.classList.toggle(
-        'show',
-        position > 480
-      );
-
-      scrollPending = false;
-    });
-  }
-
-  window.addEventListener(
-    'scroll',
-    updateScrollUI,
-    { passive: true }
-  );
-
-  backToTop.addEventListener(
-    'click',
-    () => {
-      window.scrollTo({
-        top: 0,
-        behavior: reducedMotion
-          ? 'auto'
-          : 'smooth'
-      });
-    }
-  );
-
-  const navLinks = $$('#navLinks a');
-
-  const sections = [
-    'clean',
-    'toolkit',
-    'guide',
-    'history'
-  ]
-    .map(id => document.getElementById(id))
-    .filter(Boolean);
-
-  if ('IntersectionObserver' in window) {
-    const observer =
-      new IntersectionObserver(
-        entries => {
-          entries.forEach(entry => {
-            if (!entry.isIntersecting) {
-              return;
-            }
-
-            navLinks.forEach(link => {
-              link.classList.toggle(
-                'active',
-                link.dataset.section ===
-                  entry.target.id
-              );
-            });
-          });
-        },
-        {
-          rootMargin:
-            '-40% 0px -50% 0px',
-          threshold: 0
-        }
-      );
-
-    sections.forEach(section => {
-      observer.observe(section);
-    });
-  }
-
-  /*
-   * STARTUP
-   */
-
-  async function init() {
+  async function init(){
+    await initTheme();
     const settings = await loadSettings();
-
-    await initialiseTheme(settings);
-
-    if (settings.retention) {
-      history.retention =
-        settings.retention;
-
-      historyElements.retention.value =
-        settings.retention;
+    if(settings.retention){
+      historyState.retention = settings.retention;
+      retentionSelect.value = settings.retention;
     }
-
-    if (
-      typeof settings.autoClearEnabled ===
-      'boolean'
-    ) {
-      clipboardElements.autoClear.checked =
-        settings.autoClearEnabled;
+    if(typeof settings.autoClearEnabled === 'boolean'){
+      autoClearToggle.checked = settings.autoClearEnabled;
     }
-
-    if (settings.autoClearSeconds) {
-      clipboardElements.seconds.value =
-        String(settings.autoClearSeconds);
+    if(settings.autoClearSeconds){
+      autoClearSeconds.value = String(settings.autoClearSeconds);
     }
 
     renderCalendar();
     renderDateFormats();
-    updateClock();
-    renderTimer();
-    renderOutput();
+    tickClock();
+    setInterval(tickClock, 1000);
 
-    timerElements.presets.style.display =
-      'flex';
+    timerPresets.style.display = 'flex';
+    renderTimerDisplay();
 
-    await refreshHistory();
+    await refreshHistoryFromStorage();
+    render();
   }
-
-  setInterval(updateClock, 1000);
 
   init();
 })();
 </script>
+</body>
+</html>
