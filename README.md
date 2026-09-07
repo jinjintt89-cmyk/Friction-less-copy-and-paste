@@ -8,7 +8,7 @@ TidyPaste is a lightweight, privacy-first web workbench for cleaning messy text,
 
 Getting Started
 
-1. Open https://tidypaste1.vercel.app/
+1. Open [https://tidypaste1.vercel.app/](https://fricton-less.vercel.app/)
 
 
 
