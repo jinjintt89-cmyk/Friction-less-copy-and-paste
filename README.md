@@ -12,4 +12,4 @@ Getting Started
 
 
 
-I hope you like it, and that this project gets shipped :)
+I hope you like it, and also have a app (same thing).
